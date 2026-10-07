@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Downloader · YT-DLP</title>
+<style>
+  :root {
+    --petrol-900: #0a1a1f;
+    --petrol-800: #0e242b;
+    --petrol-700: #133038;
+    --petrol-600: #1b414b;
+    --petrol-500: #24545f;
+    --mint-500: #2dd4a8;
+    --mint-400: #4fe3c0;
+    --mint-300: #86efdc;
+    --ink: #e8f4f1;
+    --ink-dim: #8fa9a6;
+    --line: rgba(45, 212, 168, .18);
+    --line-soft: rgba(45, 212, 168, .09);
+    --danger: #ff7b72;
+    --radius: 14px;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 500px at 80% -10%, rgba(45,212,168,.10), transparent 60%),
+      radial-gradient(700px 400px at -10% 30%, rgba(36,84,95,.40), transparent 55%),
+      var(--petrol-900);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 40px 24px 72px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 34px; }
+
+  .brand { display: flex; align-items: center; gap: 13px; }
+  .mark {
+    width: 38px; height: 38px; border-radius: 11px; flex: none;
+    background: linear-gradient(145deg, var(--mint-500), #1a9d80);
+    display: grid; place-items: center;
+    color: var(--petrol-900); font-weight: 800; font-size: 15px;
+    box-shadow: 0 6px 22px rgba(45,212,168,.28);
+  }
+  .brand h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.02em; }
+  .brand p { margin: 1px 0 0; font-size: 12px; color: var(--ink-dim); font-family: var(--mono); }
+
+  .pill {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+    padding: 6px 11px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--mint-400);
+    background: rgba(45,212,168,.07); white-space: nowrap;
+  }
+  .pill.off { color: var(--danger); border-color: rgba(255,123,114,.35); background: rgba(255,123,114,.07); }
+
+  .card {
+    background: linear-gradient(180deg, var(--petrol-800), rgba(14,36,43,.75));
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    padding: 26px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.35);
+  }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; background: var(--petrol-900); padding: 5px; border-radius: 11px; border: 1px solid var(--line-soft); }
+  .tab {
+    flex: 1; padding: 9px 12px; border: 0; background: transparent; cursor: pointer;
+    color: var(--ink-dim); font-family: var(--mono); font-size: 12.5px; border-radius: 8px;
+    transition: .16s; letter-spacing: .03em;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-selected="true"] { background: var(--petrol-600); color: var(--mint-300); box-shadow: inset 0 0 0 1px var(--line); }
+
+  label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 8px; }
+
+  input[type="text"] {
+    width: 100%; padding: 14px 15px;
+    background: var(--petrol-900); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 11px;
+    font-size: 15px; font-family: var(--sans); outline: none; transition: .16s;
+  }
+  input[type="text"]::placeholder { color: #4f6b6a; }
+  input[type="text"]:focus { border-color: var(--mint-500); box-shadow: 0 0 0 3px rgba(45,212,168,.14); }
+
+  .opts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; align-items: center; }
+  .seg { display: flex; background: var(--petrol-900); border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+  .seg button {
+    padding: 9px 16px; border: 0; background: transparent; cursor: pointer;
+    color: var(--ink-dim); font-family: var(--mono); font-size: 12px; transition: .16s;
+  }
+  .seg button[aria-pressed="true"] { background: var(--petrol-500); color: var(--mint-300); }
+  .seg button:hover:not([aria-pressed="true"]) { color: var(--ink); }
+
+  .go {
+    margin-left: auto; padding: 13px 26px; border: 0; cursor: pointer;
+    background: linear-gradient(145deg, var(--mint-500), #1a9d80);
+    color: #06181a; font-weight: 700; font-size: 14px; border-radius: 11px;
+    transition: .16s; box-shadow: 0 8px 24px rgba(45,212,168,.24);
+  }
+  .go:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(45,212,168,.32); }
+  .go:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+  .status {
+    margin-top: 22px; padding: 15px 16px; border-radius: 11px;
+    background: var(--petrol-900); border: 1px solid var(--line-soft);
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim);
+    display: none; white-space: pre-wrap; word-break: break-word;
+  }
+  .status.on { display: block; }
+  .status.err { border-color: rgba(255,123,114,.4); color: var(--danger); background: rgba(255,123,114,.06); }
+  .status.ok { border-color: var(--line); color: var(--mint-400); }
+
+  .bar { height: 3px; background: var(--petrol-700); border-radius: 2px; margin-top: 11px; overflow: hidden; display: none; }
+  .bar.on { display: block; }
+  .bar i { display: block; height: 100%; width: 35%; background: linear-gradient(90deg, transparent, var(--mint-400), transparent); animation: slide 1.15s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+
+  .meta { display: flex; gap: 22px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line-soft); flex-wrap: wrap; }
+  .meta div { display: flex; flex-direction: column; gap: 3px; }
+  .meta b { font-family: var(--mono); font-size: 16px; color: var(--mint-400); font-weight: 600; }
+  .meta span { font-size: 10.5px; font-family: var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-dim); }
+
+  .note {
+    margin-top: 26px; padding: 15px 17px; border-radius: 11px;
+    background: rgba(45,212,168,.05); border: 1px solid var(--line-soft);
+    font-size: 13.5px; color: var(--ink-dim); line-height: 1.65;
+  }
+  .note b { color: var(--mint-400); font-weight: 600; }
+
+  footer { margin-top: 30px; text-align: center; font-family: var(--mono); font-size: 11px; color: #4f6b6a; letter-spacing: .05em; }
+
+  @media (max-width: 640px) {
+    .go { margin-left: 0; width: 100%; }
+    header { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="mark">DL</div>
+      <div>
+        <h1>Downloader</h1>
+        <p>yt-dlp · chunked stream</p>
+      </div>
+    </div>
+    <div class="pill off" id="health">verifica in corso…</div>
+  </header>
+
+  <div class="card">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-mode="query">Ricerca</button>
+      <button class="tab" role="tab" aria-selected="false" data-mode="url">Link diretto</button>
+    </div>
+
+    <label for="input" id="inputLabel">Titolo di ricerca</label>
+    <input type="text" id="input" placeholder="es. Rick Astley Never Gonna Give You Up" autocomplete="off" />
+
+    <div class="opts">
+      <div class="seg" id="kind">
+        <button data-kind="audio" aria-pressed="true">Audio</button>
+        <button data-kind="video" aria-pressed="false">Video</button>
+      </div>
+      <div class="seg" id="quality">
+        <button data-q="360" aria-pressed="false">360p</button>
+        <button data-q="720" aria-pressed="true">720p</button>
+        <button data-q="1080" aria-pressed="false">1080p</button>
+      </div>
+      <button class="go" id="go">Scarica</button>
+    </div>
+
+    <div class="status" id="status"></div>
+    <div class="bar" id="bar"><i></i></div>
+
+    <div class="meta">
+      <div><b id="mLat">—</b><span>primo byte</span></div>
+      <div><b id="mSize">—</b><span>peso</span></div>
+      <div><b id="mRate">—</b><span>velocità</span></div>
+      <div><b id="mTime">—</b><span>tempo</span></div>
+    </div>
+  </div>
+
+  <div class="note" id="note">
+    Il file viene salvato <b>direttamente sul tuo disco</b>: il download è gestito dal browser,
+    quindi nessun limite di memoria e nessun limite dei 100 MB di WhatsApp.
+    La chiave API resta sul server e non arriva mai al browser.
+    La validazione di yt-dlp richiede <b>8-10 secondi</b> prima che parta la prima bozza.
+  </div>
+
+  <footer id="footer">—</footer>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id)
+  let mode = "query", kind = "audio", quality = 720, busy = false
+
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => {
+    mode = t.dataset.mode
+    document.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", String(x === t)))
+    $("inputLabel").textContent = mode === "query" ? "Titolo di ricerca" : "Link (YouTube, Instagram, TikTok, Facebook)"
+    $("input").placeholder = mode === "query" ? "es. Rick Astley Never Gonna Give You Up" : "https://www.youtube.com/watch?v=…"
+    $("input").focus()
+  }))
+
+  document.querySelectorAll("#kind button").forEach((b) => b.addEventListener("click", () => {
+    kind = b.dataset.kind
+    document.querySelectorAll("#kind button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)))
+    $("quality").style.opacity = kind === "audio" ? ".4" : "1"
+  }))
+
+  document.querySelectorAll("#quality button").forEach((b) => b.addEventListener("click", () => {
+    quality = Number(b.dataset.q)
+    document.querySelectorAll("#quality button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)))
+  }))
+
+  function status(text, cls) {
+    const el = $("status")
+    el.textContent = text
+    el.className = "status on" + (cls ? " " + cls : "")
+  }
+
+  async function health() {
+    try {
+      const r = await fetch("/api/health")
+      const j = await r.json()
+      const el = $("health")
+      if (j.ok) { el.textContent = "API online"; el.className = "pill" }
+      else { el.textContent = "API offline"; el.className = "pill off" }
+    } catch {
+      $("health").textContent = "proxy offline"
+      $("health").className = "pill off"
+    }
+  }
+
+  async function run() {
+    const value = $("input").value.trim()
+    if (!value) { $("input").focus(); return status("Inserisci un titolo o un link.", "err") }
+    if (busy) return
+    busy = true
+    $("go").disabled = true
+    ;["mLat", "mSize", "mRate", "mTime"].forEach((i) => $(i).textContent = "—")
+
+    const params = new URLSearchParams()
+    params.set("url", mode === "url" ? value : "")
+    params.set("query", mode === "query" ? value : "")
+    params.set("audio", String(kind === "audio"))
+    params.set("quality", String(kind === "audio" ? 0 : quality))
+
+    const t0 = performance.now()
+    status("Contatto l'API · yt-dlp sta validando il contenuto… (8-10 secondi)")
+    $("bar").className = "bar on"
+
+    try {
+      // Prima fase: apriamo lo stream e aspettiamo i PRIMI header senza
+      // leggere il corpo. Così vediamo se l'API ha accettato e cosa manda,
+      // senza caricare un solo byte in memoria.
+      const probe = await fetch("/api/download/stream?" + params.toString())
+      const el = Math.round(performance.now() - t0)
+      $("mLat").textContent = (el / 1000).toFixed(1) + "s"
+
+      if (!probe.ok) {
+        let msg = probe.statusText
+        try { msg = (await probe.json()).message || msg } catch { /* non json */ }
+        throw new Error(msg)
+      }
+
+      const cd = probe.headers.get("content-disposition") || ""
+      const m = /filename="?([^";]+)"?/i.exec(cd)
+      const name = m ? m[1] : "download"
+      const ctype = probe.headers.get("content-type") || "application/octet-stream"
+      probe.body.cancel()
+
+      // Seconda fase: l'URL va passato al browser così com'è. Il browser
+      // scarica in streaming su disco e mostra la sua barra: nessun limite
+      // di memoria, regge anche file da piu' GB.
+      const href = "/api/download/stream?" + params.toString()
+      const a = document.createElement("a")
+      a.href = href
+      a.download = name
+      a.rel = "noopener"
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+
+      status(
+        "Download avviato · " + name + "\n" +
+        "Formato: " + ctype + "\n" +
+        "Salvataggio su disco delegato al browser: segui la barra delle"+" download.",
+        "ok"
+      )
+      $("mSize").textContent = "su disco"
+      $("mRate").textContent = "nativo"
+      $("mTime").textContent = "—"
+      $("bar").className = "bar"
+    } catch (e) {
+      $("bar").className = "bar"
+      status(e && e.message ? e.message : String(e), "err")
+    } finally {
+      busy = false
+      $("go").disabled = false
+    }
+  }
+
+  $("go").addEventListener("click", run)
+  $("input").addEventListener("keydown", (e) => { if (e.key === "Enter") run() })
+
+  health()
+  setInterval(health, 30000)
+  fetch("/api/info").then((r) => r.json()).then((j) => {
+    $("footer").textContent = "node " + j.node + " · uptime " + j.uptimeSec + "s · stream chunked"
+  }).catch(() => { $("footer").textContent = "proxy non raggiungibile" })
+</script>
+</body>
+</html>

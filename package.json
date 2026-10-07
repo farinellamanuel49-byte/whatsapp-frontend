@@ -1,0 +1,13 @@
+{
+  "name": "yt-downloader-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dashboard pubblica per scaricare audio/video tramite yt-dlp API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

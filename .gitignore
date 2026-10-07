@@ -1,0 +1,11 @@
+node_modules/
+*.log
+cookies.txt
+config*.json
+*.bak
+pot-provider/node_modules/
+pot-provider/server.log
+pot-provider/server.err.log
+.DS_Storetools/
+pot_out.txt
+setup-pot.ps1
