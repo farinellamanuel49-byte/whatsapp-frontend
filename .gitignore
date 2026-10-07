@@ -3,9 +3,10 @@ node_modules/
 cookies.txt
 config*.json
 *.bak
+tools/
 pot-provider/node_modules/
 pot-provider/server.log
 pot-provider/server.err.log
-.DS_Storetools/
 pot_out.txt
 setup-pot.ps1
+.DS_Store
