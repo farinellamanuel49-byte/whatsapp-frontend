@@ -19,7 +19,7 @@ let cookiesSyncing = false
 // quindi li serve il secondo: il probe con timeout breve decide chi usare.
 const API_BASES = (process.env.API_BASES
   ? process.env.API_BASES.split(",")
-  : ["http://82.223.13.114:81", "http://192.168.100.14:81"]
+  : ["http://82.223.13.114:81"]
 ).map((s) => s.trim()).filter(Boolean)
 
 const PROBE_MS = Number(process.env.PROBE_MS) || 4000
