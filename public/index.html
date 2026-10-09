@@ -318,7 +318,7 @@
   health()
   setInterval(health, 30000)
   fetch("/api/info").then((r) => r.json()).then((j) => {
-    $("footer").textContent = "node " + j.node + " · uptime " + j.uptimeSec + "s · api 82.223.13.114 · stream chunked"
+    $("footer").textContent = "node " + j.node + " · uptime " + j.uptimeSec + "s · stream chunked"
   }).catch(() => { $("footer").textContent = "proxy non raggiungibile" })
 </script>
 </body>
