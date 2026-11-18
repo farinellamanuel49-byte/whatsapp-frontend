@@ -1,0 +1,120 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../apple_music_service.dart';
+import '../config.dart';
+
+/// Impostazioni: URL del proxy API e (iOS) token Apple Music.
+Future<void> showSettingsDialog(BuildContext context) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => const _SettingsDialog(),
+  );
+}
+
+class _SettingsDialog extends StatefulWidget {
+  const _SettingsDialog();
+
+  @override
+  State<_SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<_SettingsDialog> {
+  late final TextEditingController _baseUrl;
+  late final TextEditingController _devToken;
+  late final TextEditingController _userToken;
+  late final TextEditingController _storefront;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = context.read<Settings>();
+    _baseUrl = TextEditingController(text: s.baseUrl);
+    _devToken = TextEditingController(text: s.appleDeveloperToken);
+    _userToken = TextEditingController(text: s.appleUserToken);
+    _storefront = TextEditingController(text: s.appleStorefront);
+  }
+
+  @override
+  void dispose() {
+    _baseUrl.dispose();
+    _devToken.dispose();
+    _userToken.dispose();
+    _storefront.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final s = context.read<Settings>();
+    await s.setBaseUrl(_baseUrl.text);
+    await s.saveAppleConfig(
+      developerToken: _devToken.text,
+      userToken: _userToken.text,
+      storefront: _storefront.text,
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isIOS = context.read<AppleMusicService>().supported;
+    return AlertDialog(
+      title: const Text('Impostazioni'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _baseUrl,
+              decoration: const InputDecoration(
+                labelText: 'URL server API',
+                hintText: 'http://192.168.1.10:8080',
+              ),
+              keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 12),
+            if (isIOS) ...[
+              const Divider(),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Apple Music (solo iOS)',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _devToken,
+                decoration: const InputDecoration(
+                  labelText: 'Developer token (JWT)',
+                  hintText: 'eyJ…',
+                ),
+                obscureText: true,
+              ),
+              TextField(
+                controller: _userToken,
+                decoration: const InputDecoration(
+                  labelText: 'Music-User-Token (opzionale)',
+                  hintText: 'per libreria e store privato',
+                ),
+                obscureText: true,
+              ),
+              TextField(
+                controller: _storefront,
+                decoration: const InputDecoration(
+                  labelText: 'Storefront',
+                  hintText: 'it',
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Salva')),
+      ],
+    );
+  }
+}
