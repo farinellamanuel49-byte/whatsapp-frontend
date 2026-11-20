@@ -5,6 +5,7 @@ import '../apple_music_service.dart';
 import '../download_manager.dart';
 import '../player_service.dart';
 import '../playlist_service.dart';
+import '../youtube_music_service.dart';
 
 /// Scheda "Download": lista dei file scaricati con progresso e riproduzione.
 class DownloadsPage extends StatefulWidget {
@@ -52,6 +53,45 @@ class _DownloadsPageState extends State<DownloadsPage> {
     }
   }
 
+  bool _syncingYT = false;
+
+  /// Sincronizza manualmente (ri-sync) tutti i brani audio su YouTube Music.
+  Future<void> _syncWithYouTubeMusic() async {
+    final yt = context.read<YouTubeMusicService>();
+    final dm = context.read<DownloadManager>();
+    if (!yt.configured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Configura prima il cookie SAPISID nelle Impostazioni.'),
+        ),
+      );
+      return;
+    }
+    final done = dm.items.where((e) => e.finished && e.audio).toList();
+    if (done.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nessun brano audio scaricato da sincronizzare.')),
+      );
+      return;
+    }
+    final queries = done.map((e) => e.syncTerm).where((q) => q.isNotEmpty).toSet().toList();
+    setState(() => _syncingYT = true);
+    var ok = 0;
+    for (final q in queries) {
+      if (await yt.syncQuery(q)) ok++;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'YouTube Music: $ok brani aggiunti ai Mi piace'
+          '${queries.length - ok > 0 ? ' · ${queries.length - ok} non trovati' : ''}',
+        ),
+      ),
+    );
+    setState(() => _syncingYT = false);
+  }
+
   Future<void> _playAll(List<DownloadItem> done) async {
     final player = context.read<PlayerService>();
     final tracks = done
@@ -70,11 +110,22 @@ class _DownloadsPageState extends State<DownloadsPage> {
     final dm = context.watch<DownloadManager>();
     final done = dm.items.where((e) => e.finished && e.filePath != null).toList();
     final apple = context.watch<AppleMusicService>();
+    final ytMusic = context.watch<YouTubeMusicService>();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Download'),
         actions: [
+          if (ytMusic.supported && ytMusic.syncedCount > 0)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  '${ytMusic.syncedCount} su YT Music',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF4FE3C0)),
+                ),
+              ),
+            ),
           if (apple.supported && apple.autoSyncedCount > 0)
             Center(
               child: Padding(
@@ -84,6 +135,18 @@ class _DownloadsPageState extends State<DownloadsPage> {
                   style: const TextStyle(fontSize: 12, color: Color(0xFF4FE3C0)),
                 ),
               ),
+            ),
+          if (ytMusic.supported && dm.items.any((e) => e.finished && e.audio))
+            IconButton(
+              tooltip: 'Sincronizza con YouTube Music',
+              icon: _syncingYT
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.music_note),
+              onPressed: _syncingYT ? null : _syncWithYouTubeMusic,
             ),
           if (apple.supported && dm.items.any((e) => e.finished && e.audio))
             IconButton(

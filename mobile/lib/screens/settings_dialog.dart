@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../apple_music_service.dart';
 import '../config.dart';
+import '../youtube_music_service.dart';
 
 /// Impostazioni: URL del proxy API e (iOS) token Apple Music.
 Future<void> showSettingsDialog(BuildContext context) {
@@ -24,6 +25,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   late final TextEditingController _devToken;
   late final TextEditingController _userToken;
   late final TextEditingController _storefront;
+  late final TextEditingController _sapisid;
 
   @override
   void initState() {
@@ -33,6 +35,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     _devToken = TextEditingController(text: s.appleDeveloperToken);
     _userToken = TextEditingController(text: s.appleUserToken);
     _storefront = TextEditingController(text: s.appleStorefront);
+    _sapisid = TextEditingController(
+        text: context.read<YouTubeMusicService>().sapisid);
   }
 
   @override
@@ -41,6 +45,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     _devToken.dispose();
     _userToken.dispose();
     _storefront.dispose();
+    _sapisid.dispose();
     super.dispose();
   }
 
@@ -52,12 +57,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       userToken: _userToken.text,
       storefront: _storefront.text,
     );
+    await context.read<YouTubeMusicService>().saveSapisid(_sapisid.text);
     if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final isIOS = context.read<AppleMusicService>().supported;
+    final isAndroid = context.read<YouTubeMusicService>().supported;
     return AlertDialog(
       title: const Text('Impostazioni'),
       content: SingleChildScrollView(
@@ -103,6 +110,30 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   labelText: 'Storefront',
                   hintText: 'it',
                 ),
+              ),
+            ],
+            if (isAndroid) ...[
+              const Divider(),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('YouTube Music (solo Android)',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _sapisid,
+                decoration: const InputDecoration(
+                  labelText: 'Cookie SAPISID',
+                  hintText: 'da music.youtube.com → DevTools → Cookies',
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Come trovarlo: apri music.youtube.com nel browser, '
+                'F12 → Application → Cookies → copia il valore di SAPISID. '
+                'I brani scaricati verranno aggiunti ai "Mi piace" di YouTube Music.',
+                style: TextStyle(fontSize: 11, color: Colors.white54),
               ),
             ],
           ],

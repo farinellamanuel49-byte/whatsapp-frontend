@@ -18,6 +18,7 @@ dependencies:
   music_kit: ^1.2.1
   music_kit_platform_interface: ^1.2.0
   uuid: ^4.5.1
+  crypto: ^3.0.8
 
 dev_dependencies:
   flutter_test:

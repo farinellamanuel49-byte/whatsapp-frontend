@@ -12,6 +12,7 @@ import 'screens/downloads_page.dart';
 import 'screens/playlists_page.dart';
 import 'screens/search_page.dart';
 import 'widgets/player_bar.dart';
+import 'youtube_music_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,16 +23,22 @@ Future<void> main() async {
   final appleMusic = AppleMusicService(settings);
   final downloads = DownloadManager(api);
   final playlists = PlaylistService();
+  final ytMusic = YouTubeMusicService();
 
-  // Su iOS: a fine download il brano viene cercato sul catalogo Apple Music
-  // e aggiunto automaticamente alla libreria utente.
+  // A fine download: iOS sincronizza con Apple Music, Android con
+  // YouTube Music (se configurato il cookie SAPISID).
   downloads.onDone = (item) async {
     if (!item.audio || item.syncTerm.isEmpty) return;
-    await appleMusic.autoSyncTrack(item.syncTerm);
+    if (ytMusic.supported && ytMusic.configured) {
+      await ytMusic.syncQuery(item.syncTerm);
+    } else {
+      await appleMusic.autoSyncTrack(item.syncTerm);
+    }
   };
 
   await downloads.init();
   await playlists.init();
+  await ytMusic.load();
 
   runApp(
     MultiProvider(
@@ -40,6 +47,7 @@ Future<void> main() async {
         Provider<ApiClient>.value(value: api),
         ChangeNotifierProvider.value(value: downloads),
         ChangeNotifierProvider.value(value: playlists),
+        ChangeNotifierProvider.value(value: ytMusic),
         ChangeNotifierProvider(create: (_) => PlayerService()),
         ChangeNotifierProvider.value(value: appleMusic),
       ],
