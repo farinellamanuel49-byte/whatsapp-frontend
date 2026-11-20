@@ -19,7 +19,7 @@ let cookiesSyncing = false
 // quindi li serve il secondo: il probe con timeout breve decide chi usare.
 const API_BASES = (process.env.API_BASES
   ? process.env.API_BASES.split(",")
-  : ["http://82.223.13.114"]
+  : ["http://192.168.100.14"]
 ).map((s) => s.trim()).filter(Boolean)
 
 const PROBE_MS = Number(process.env.PROBE_MS) || 4000
@@ -155,6 +155,44 @@ function baseOrder() {
   return [preferred, ...API_BASES.map((_, i) => i).filter((i) => i !== preferred)]
 }
 
+// Mappa un parametro url di /api/download/stream all'endpoint POST
+// dell'API IIS (song/youtube/tiktok/instagram/facebook).
+function resolveEndpoint(search) {
+  const p = new URLSearchParams(search)
+  const url = (p.get("url") || "").toLowerCase()
+  const query = p.get("query") || ""
+  const audio = p.get("audio") === "true"
+  if (url.includes("tiktok.com")) return { endpoint: "tiktok", url: p.get("url") || "", query }
+  if (url.includes("instagram.com")) return { endpoint: "instagram", url: p.get("url") || "", query }
+  if (url.includes("facebook.com") || url.includes("fb.watch")) return { endpoint: "facebook", url: p.get("url") || "", query }
+  if (audio) return { endpoint: "song", url: p.get("url") || "", query }
+  // video: l'endpoint youtube vuole 'url'; ytsearch1: risolve le ricerche
+  let vurl = p.get("url") || ""
+  let vquery = query
+  if (!vurl && vquery) { vurl = `ytsearch1:${vquery}`; vquery = "" }
+  return { endpoint: "youtube", url: vurl, query: vquery }
+}
+
+// Risolve la richiesta in un URL diretto del file via POST /api/download/{ep}.
+async function resolveMediaUrl(base, info, signal) {
+  const r = await fetch(`${base}/api/download/${info.endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+    body: JSON.stringify({ url: info.url, query: info.query }),
+    signal,
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok || data.ok !== true) {
+    throw new Error(data.error || data.message || `API ${r.status}`)
+  }
+  const media = Array.isArray(data.media) ? data.media : []
+  if (!media.length) throw new Error("Nessun file multimediale trovato")
+  const m = media[0]
+  const title = (data.title || "download").toString()
+  const ext = (m.ext || "mp4").toString()
+  return { url: m.url, filename: `${title}.${ext}` }
+}
+
 async function proxyDownload(req, res, url) {
   const controller = new AbortController()
   res.on("close", () => {
@@ -163,6 +201,7 @@ async function proxyDownload(req, res, url) {
 
   const started = Date.now()
   const search = url.search.startsWith("?") ? url.search.slice(1) : url.search
+  const info = resolveEndpoint(search)
   const order = baseOrder()
 
   // autopassa sempre i cookie dalla root del progetto all'API prima del download
@@ -170,29 +209,41 @@ async function proxyDownload(req, res, url) {
 
   let upstream = null
   let used = null
+  let filename = "download"
 
   for (const i of order) {
     if (controller.signal.aborted) return
-    const target = `${API_BASES[i]}/api/download/stream?${search}`
-    console.log(`[proxy] richiesta verso ${API_BASES[i]}`)
+    const base = API_BASES[i]
+    console.log(`[proxy] risolvo ${info.endpoint} verso ${base}`)
 
-    const r = await fetch(target, {
-      headers: { "X-API-Key": API_KEY },
-      signal: controller.signal,
-    }).catch((e) => {
-      if (controller.signal.aborted) return null
-      const reason = (e && (e.cause && e.cause.message) || e.message || String(e))
-      const code = (e && e.cause && e.cause.code) || ""
-      console.error(`[proxy] ${API_BASES[i]} non raggiungibile: ${reason} ${code}`)
-      return false
-    })
+    try {
+      const media = await resolveMediaUrl(base, info, controller.signal)
+      if (!media.url) throw new Error("URL del file mancante")
+      filename = media.filename
 
-    if (r === null) return
-    if (r === false) continue
+      // Header Range dalla richiesta browser (se presente) per supportare
+      // la riproduzione/seek nel frontend.
+      const range = req.headers.range
+      const headers = {}
+      if (range) headers["Range"] = range
 
-    upstream = r
-    used = i
-    break
+      upstream = await fetch(media.url, {
+        headers,
+        signal: controller.signal,
+        redirect: "follow",
+      }).catch((e) => {
+        if (controller.signal.aborted) return null
+        console.error(`[proxy] ${base} media non raggiungibile: ${e && e.message}`)
+        return false
+      })
+      if (upstream === null) return
+      if (upstream === false) continue
+      used = i
+      break
+    } catch (e) {
+      console.error(`[proxy] ${base} resolve fallito: ${e && e.message}`)
+      continue
+    }
   }
 
   if (!upstream) {
@@ -211,17 +262,19 @@ async function proxyDownload(req, res, url) {
   }
 
   // attachment: il browser salva su disco invece di riprodurre in pagina.
-  let disposition = upstream.headers.get("content-disposition") || ""
-  if (/^inline/i.test(disposition)) disposition = "attachment" + disposition.slice(6)
-  if (!disposition) disposition = 'attachment; filename="download"'
-
+  const safeName = filename.replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "download"
   const headers = {
     "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
-    "Content-Disposition": disposition,
+    "Content-Disposition": `attachment; filename="${safeName}"`,
     "Cache-Control": "no-store",
     "X-Proxy": "whatsapp-frontend",
     "X-Api-Base": API_BASES[used],
   }
+  const cl = upstream.headers.get("content-length")
+  if (cl) headers["Content-Length"] = cl
+  const cr = upstream.headers.get("content-range")
+  if (cr) headers["Content-Range"] = cr
+  if (upstream.status === 206) headers["Accept-Ranges"] = "bytes"
 
   res.writeHead(upstream.status, headers)
   if (!upstream.body) {
