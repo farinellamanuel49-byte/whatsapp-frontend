@@ -6,8 +6,10 @@ import 'apple_music_service.dart';
 import 'config.dart';
 import 'download_manager.dart';
 import 'player_service.dart';
+import 'playlist_service.dart';
 import 'screens/apple_music_page.dart';
 import 'screens/downloads_page.dart';
+import 'screens/playlists_page.dart';
 import 'screens/search_page.dart';
 import 'widgets/player_bar.dart';
 
@@ -19,6 +21,7 @@ Future<void> main() async {
   final api = ApiClient(settings);
   final appleMusic = AppleMusicService(settings);
   final downloads = DownloadManager(api);
+  final playlists = PlaylistService();
 
   // Su iOS: a fine download il brano viene cercato sul catalogo Apple Music
   // e aggiunto automaticamente alla libreria utente.
@@ -28,6 +31,7 @@ Future<void> main() async {
   };
 
   await downloads.init();
+  await playlists.init();
 
   runApp(
     MultiProvider(
@@ -35,6 +39,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: settings),
         Provider<ApiClient>.value(value: api),
         ChangeNotifierProvider.value(value: downloads),
+        ChangeNotifierProvider.value(value: playlists),
         ChangeNotifierProvider(create: (_) => PlayerService()),
         ChangeNotifierProvider.value(value: appleMusic),
       ],
@@ -83,6 +88,7 @@ class _HomeShellState extends State<_HomeShell> {
     final pages = <Widget>[
       const SearchPage(),
       const DownloadsPage(),
+      const PlaylistsPage(),
       if (widget.showAppleMusic) const AppleMusicPage(),
     ];
 
@@ -106,6 +112,10 @@ class _HomeShellState extends State<_HomeShell> {
           const NavigationDestination(
             icon: Icon(Icons.download_done_outlined),
             label: 'Download',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.queue_music),
+            label: 'Playlist',
           ),
           if (widget.showAppleMusic)
             const NavigationDestination(

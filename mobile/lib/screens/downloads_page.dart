@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../apple_music_service.dart';
 import '../download_manager.dart';
 import '../player_service.dart';
+import '../playlist_service.dart';
 
 /// Scheda "Download": lista dei file scaricati con progresso e riproduzione.
 class DownloadsPage extends StatefulWidget {
@@ -138,6 +139,52 @@ class _DownloadTile extends StatelessWidget {
     return '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  /// Mostra il selettore playlist e aggiunge il brano alla scelta.
+  Future<void> _addToPlaylist(BuildContext context, DownloadItem item) async {
+    final svc = context.read<PlaylistService>();
+    if (svc.playlists.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Crea prima una playlist dalla scheda Playlist.'),
+        ),
+      );
+      return;
+    }
+    final chosen = await showModalBottomSheet<Playlist>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Aggiungi a playlist',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+            ...svc.playlists.map(
+              (p) => ListTile(
+                leading: const Icon(Icons.queue_music,
+                    color: Color(0xFF4FE3C0)),
+                title: Text(p.name),
+                subtitle: Text('${p.trackIds.length} brani'),
+                trailing: p.trackIds.contains(item.id)
+                    ? const Icon(Icons.check, color: Colors.green)
+                    : null,
+                onTap: () => Navigator.pop(ctx, p),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (chosen != null && context.mounted) {
+      svc.addTrack(chosen, item.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Aggiunto a "${chosen.name}"')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusLabel = switch (item.status) {
@@ -232,6 +279,11 @@ class _DownloadTile extends StatelessWidget {
                       final start = tracks.indexWhere((t) => t.id == item.id);
                       await player.playQueue(tracks, start: start < 0 ? 0 : start);
                     },
+                  ),
+                  IconButton(
+                    tooltip: 'Aggiungi a playlist',
+                    icon: const Icon(Icons.playlist_add, size: 18),
+                    onPressed: () => _addToPlaylist(context, item),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 18),

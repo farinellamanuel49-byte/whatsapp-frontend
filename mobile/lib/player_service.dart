@@ -9,8 +9,12 @@ class LocalTrack {
   final String filePath;
 }
 
-/// Player audio per i brani scaricati. Su iOS può convivere con MusicKit:
-/// quando parti Apple Music la coda locale viene messa in pausa.
+/// Modalità ripetizione: come nei servizi di streaming.
+enum RepeatMode { off, all, one }
+
+/// Player audio per i brani scaricati. Supporta coda, shuffle e repeat.
+/// Su iOS può convivere con MusicKit: quando parti Apple Music la coda
+/// locale viene messa in pausa.
 class PlayerService extends ChangeNotifier {
   final AudioPlayer player = AudioPlayer();
 
@@ -26,10 +30,15 @@ class PlayerService extends ChangeNotifier {
   List<LocalTrack> queue = const [];
   int index = -1;
 
+  RepeatMode repeatMode = RepeatMode.off;
+  bool _shuffleEnabled = false;
+
   Stream<Duration> get positionStream => player.positionStream;
   Stream<Duration?> get durationStream => player.durationStream;
   Stream<PlayerState> get playerStateStream => player.playerStateStream;
   Stream<int?> get currentIndexStream => player.currentIndexStream;
+  Stream<bool> get shuffleStream => player.shuffleModeEnabledStream;
+  Stream<LoopMode> get loopModeStream => player.loopModeStream;
 
   bool get hasTrack => index >= 0 && index < queue.length;
   LocalTrack? get current => hasTrack ? queue[index] : null;
@@ -64,13 +73,42 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> next() async {
-    if (!player.hasNext) return;
+    if (!player.hasNext) {
+      // Con repeat "tutto" just_audio riavvia da solo; se siamo alla fine
+      // e repeat è spento, niente da fare.
+      return;
+    }
     await player.seekToNext();
   }
 
   Future<void> previous() async {
-    if (!player.hasPrevious) return;
+    if (player.position.inSeconds > 3 || !player.hasPrevious) {
+      await player.seek(Duration.zero);
+      return;
+    }
     await player.seekToPrevious();
+  }
+
+  /// Shuffle on/off sulle sorgenti correnti (come Spotify).
+  Future<void> toggleShuffle() async {
+    _shuffleEnabled = !_shuffleEnabled;
+    await player.setShuffleModeEnabled(_shuffleEnabled);
+    notifyListeners();
+  }
+
+  /// Cicla la modalità ripetizione: off → tutto → uno → off.
+  Future<void> cycleRepeat() async {
+    repeatMode = switch (repeatMode) {
+      RepeatMode.off => RepeatMode.all,
+      RepeatMode.all => RepeatMode.one,
+      RepeatMode.one => RepeatMode.off,
+    };
+    await player.setLoopMode(switch (repeatMode) {
+      RepeatMode.off => LoopMode.off,
+      RepeatMode.all => LoopMode.all,
+      RepeatMode.one => LoopMode.one,
+    });
+    notifyListeners();
   }
 
   Future<void> seek(Duration position) => player.seek(position);
@@ -79,11 +117,13 @@ class PlayerService extends ChangeNotifier {
     await player.stop();
     index = -1;
     queue = const [];
+    repeatMode = RepeatMode.off;
+    _shuffleEnabled = false;
+    await player.setLoopMode(LoopMode.off);
+    await player.setShuffleModeEnabled(false);
     notifyListeners();
   }
 
-  /// Suggerimento per la UI: con file corrotti just_audio passa al brano
-  /// successivo della coda concatenata invece di fermarsi.
   @override
   void dispose() {
     player.dispose();
