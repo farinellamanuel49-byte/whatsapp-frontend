@@ -173,16 +173,31 @@ class ApiClient {
     void Function(int received, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    try {
-      await dio.download(
-        mediaUrl,
-        tempPath,
-        onReceiveProgress: onProgress,
-        cancelToken: cancelToken,
-      );
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) rethrow;
-      throw ApiException(_errorMessage(e));
+    // googlevideo a volte risponde 403/410/429 al primo colpo (firma non
+    // ancora propagata): si riprova qualche volta sulla stessa URL.
+    DioException? lastError;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        await dio.download(
+          mediaUrl,
+          tempPath,
+          onReceiveProgress: onProgress,
+          cancelToken: cancelToken,
+        );
+        lastError = null;
+        break;
+      } on DioException catch (e) {
+        if (CancelToken.isCancel(e)) rethrow;
+        lastError = e;
+        final code = e.response?.statusCode ?? 0;
+        final retryable = code == 403 || code == 410 || code == 429 || code == 0;
+        if (!retryable || attempt == 3) break;
+        await Future.delayed(Duration(milliseconds: 800 * (attempt + 1)));
+      }
+    }
+    if (lastError != null) {
+      if (CancelToken.isCancel(lastError!)) throw lastError!;
+      throw ApiException(_errorMessage(lastError!));
     }
 
     var name = fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();

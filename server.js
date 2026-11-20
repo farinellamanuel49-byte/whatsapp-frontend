@@ -227,16 +227,28 @@ async function proxyDownload(req, res, url) {
       const headers = {}
       if (range) headers["Range"] = range
 
-      upstream = await fetch(media.url, {
-        headers,
-        signal: controller.signal,
-        redirect: "follow",
-      }).catch((e) => {
-        if (controller.signal.aborted) return null
-        console.error(`[proxy] ${base} media non raggiungibile: ${e && e.message}`)
-        return false
-      })
-      if (upstream === null) return
+      // googlevideo a volte risponde 403/410/429 al primo colpo (firma non
+      // ancora propagata): si riprova sulla stessa URL some volte.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        upstream = await fetch(media.url, {
+          headers,
+          signal: controller.signal,
+          redirect: "follow",
+        }).catch((e) => {
+          if (controller.signal.aborted) return null
+          console.error(`[proxy] ${base} media non raggiungibile: ${e && e.message}`)
+          return false
+        })
+        if (upstream === null) return
+        if (upstream === false) break
+        const st = upstream.status
+        if ((st === 403 || st === 410 || st === 429) && attempt < 3) {
+          console.log(`[proxy] ${st} su media URL, retry ${attempt + 1}`)
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)))
+          continue
+        }
+        break
+      }
       if (upstream === false) continue
       used = i
       break
