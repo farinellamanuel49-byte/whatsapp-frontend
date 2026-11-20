@@ -91,11 +91,19 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     final endpoint = _endpoint(query: query, url: url, audio: audio);
+    // /song accetta query di ricerca; /youtube richiede 'url' — per le
+    // ricerche testuali si usa la sintassi yt-dlp ytsearch1:...
+    String bodyUrl = url ?? '';
+    String bodyQuery = query ?? '';
+    if (endpoint == 'youtube' && bodyUrl.isEmpty && bodyQuery.isNotEmpty) {
+      bodyUrl = 'ytsearch1:$bodyQuery';
+      bodyQuery = '';
+    }
     Map<String, dynamic> data;
     try {
       final r = await dio.post<Map<String, dynamic>>(
         '/api/download/$endpoint',
-        data: {'url': url ?? '', 'query': query ?? ''},
+        data: {'url': bodyUrl, 'query': bodyQuery},
         options: Options(
           headers: {'X-API-Key': kApiKey},
           sendTimeout: const Duration(minutes: 3),
