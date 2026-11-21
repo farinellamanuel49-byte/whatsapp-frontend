@@ -149,6 +149,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 style: TextStyle(fontSize: 11, color: Colors.white54),
               ),
             ],
+            if (isIOS) ...[
             const Divider(),
             const Align(
               alignment: Alignment.centerLeft,
@@ -185,6 +186,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               'nella libreria Music dell\'iPhone via rustunes.',
               style: TextStyle(fontSize: 11, color: Colors.white54),
             ),
+            ],
           ],
         ),
       ),

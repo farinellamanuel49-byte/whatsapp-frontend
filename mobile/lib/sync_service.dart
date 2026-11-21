@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' show File, Platform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -27,7 +27,11 @@ class SyncService extends ChangeNotifier {
     return _dio!;
   }
 
+  /// La sync via Pi è solo per iOS (inietta nella libreria Music).
+  bool get supported => Platform.isIOS;
+
   bool get configured =>
+      supported &&
       settings.syncServerUrl.trim().isNotEmpty &&
       settings.syncToken.trim().isNotEmpty;
 
