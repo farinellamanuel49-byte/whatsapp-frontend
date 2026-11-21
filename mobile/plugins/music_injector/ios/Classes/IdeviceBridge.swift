@@ -1,5 +1,5 @@
 import Foundation
-import sqlite3
+import SQLite3
 
 /// Ponte verso i servizi iOS via idevice-ffi (Rust).
 /// Si connette a usbmuxd in localhost (127.0.0.1:27015) — su iOS

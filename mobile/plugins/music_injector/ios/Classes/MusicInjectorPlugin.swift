@@ -1,6 +1,6 @@
 import Flutter
 import UIKit
-import sqlite3
+import SQLite3
 
 /// Plugin iOS: inietta brani/playliste nella libreria Music del dispositivo
 /// parlando coi servizi di sistema via usbmuxd loopback (127.0.0.1:27015)
