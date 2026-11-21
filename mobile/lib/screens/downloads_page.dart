@@ -1,10 +1,14 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../apple_music_service.dart';
 import '../download_manager.dart';
+import '../music_injector.dart';
 import '../player_service.dart';
 import '../playlist_service.dart';
+import '../sync_service.dart';
 import '../youtube_music_service.dart';
 
 /// Scheda "Download": lista dei file scaricati con progresso e riproduzione.
@@ -92,6 +96,100 @@ class _DownloadsPageState extends State<DownloadsPage> {
     setState(() => _syncingYT = false);
   }
 
+  bool _syncingPi = false;
+
+  /// Carica tutti i brani audio completati sul Pi e lancia rustunes.
+  Future<void> _syncWithPi() async {
+    final sync = context.read<SyncService>();
+    final dm = context.read<DownloadManager>();
+    if (!sync.configured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Configura il server sync nelle Impostazioni.'),
+        ),
+      );
+      return;
+    }
+    final done = dm.items
+        .where((e) => e.finished && e.audio && e.filePath != null)
+        .toList();
+    if (done.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nessun brano audio scaricato.')),
+      );
+      return;
+    }
+    setState(() => _syncingPi = true);
+    try {
+      var uploaded = 0;
+      for (final item in done) {
+        try {
+          await sync.uploadFile(item.filePath!, item.fileName ?? item.id);
+          uploaded++;
+        } catch (_) {}
+      }
+      await sync.runSync();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Caricati $uploaded brani sul Pi — sync iPhone avviata. '
+            'Controlla lo stato tra poco.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sync Pi fallita: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _syncingPi = false);
+    }
+  }
+
+  bool _injecting = false;
+
+  /// Inietta tutti i brani audio completati nella libreria Music iOS.
+  Future<void> _injectAll() async {
+    final dm = context.read<DownloadManager>();
+    final done = dm.items
+        .where((e) => e.finished && e.audio && e.filePath != null)
+        .toList();
+    if (done.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nessun brano audio scaricato.')),
+      );
+      return;
+    }
+    setState(() => _injecting = true);
+    var ok = 0;
+    String? lastError;
+    for (final item in done) {
+      try {
+        final r = await MusicInjector.injectTrack(
+          localPath: item.filePath!,
+          title: item.fileName,
+          artist: item.label,
+        );
+        if (r['ok'] == true) ok++;
+      } catch (e) {
+        lastError = e.toString();
+      }
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Iniettati $ok brani in Music'
+          '${done.length - ok > 0 ? ' · ${done.length - ok} errori' : ''}'
+          '${lastError != null ? ' — $lastError' : ''}',
+        ),
+      ),
+    );
+    setState(() => _injecting = false);
+  }
+
   Future<void> _playAll(List<DownloadItem> done) async {
     final player = context.read<PlayerService>();
     final tracks = done
@@ -111,6 +209,7 @@ class _DownloadsPageState extends State<DownloadsPage> {
     final done = dm.items.where((e) => e.finished && e.filePath != null).toList();
     final apple = context.watch<AppleMusicService>();
     final ytMusic = context.watch<YouTubeMusicService>();
+    final sync = context.watch<SyncService>();
 
     return Scaffold(
       appBar: AppBar(
@@ -159,6 +258,30 @@ class _DownloadsPageState extends State<DownloadsPage> {
                     )
                   : const Icon(Icons.sync),
               onPressed: _syncing ? null : _syncWithAppleMusic,
+            ),
+          if (Platform.isIOS && dm.items.any((e) => e.finished && e.audio))
+            IconButton(
+              tooltip: 'Inietta nella libreria Music',
+              icon: _injecting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.library_add),
+              onPressed: _injecting ? null : _injectAll,
+            ),
+          if (sync.configured && dm.items.any((e) => e.finished && e.audio))
+            IconButton(
+              tooltip: 'Sincronizza con iPhone (server Pi)',
+              icon: _syncingPi
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.phone_iphone),
+              onPressed: _syncingPi ? null : _syncWithPi,
             ),
           if (done.isNotEmpty)
             IconButton(

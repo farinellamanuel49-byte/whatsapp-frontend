@@ -26,6 +26,9 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   late final TextEditingController _userToken;
   late final TextEditingController _storefront;
   late final TextEditingController _sapisid;
+  late final TextEditingController _syncUrl;
+  late final TextEditingController _syncToken;
+  late bool _syncAuto;
 
   @override
   void initState() {
@@ -37,6 +40,9 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     _storefront = TextEditingController(text: s.appleStorefront);
     _sapisid = TextEditingController(
         text: context.read<YouTubeMusicService>().sapisid);
+    _syncUrl = TextEditingController(text: s.syncServerUrl);
+    _syncToken = TextEditingController(text: s.syncToken);
+    _syncAuto = s.syncAutoUpload;
   }
 
   @override
@@ -46,6 +52,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     _userToken.dispose();
     _storefront.dispose();
     _sapisid.dispose();
+    _syncUrl.dispose();
+    _syncToken.dispose();
     super.dispose();
   }
 
@@ -58,6 +66,11 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       storefront: _storefront.text,
     );
     await context.read<YouTubeMusicService>().saveSapisid(_sapisid.text);
+    await s.saveSyncConfig(
+      serverUrl: _syncUrl.text,
+      token: _syncToken.text,
+      autoUpload: _syncAuto,
+    );
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -136,6 +149,42 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 style: TextStyle(fontSize: 11, color: Colors.white54),
               ),
             ],
+            const Divider(),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Sincronizzazione iPhone (server Pi)',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _syncUrl,
+              decoration: const InputDecoration(
+                labelText: 'URL server sync',
+                hintText: 'https://pi.example.com:8787',
+              ),
+              keyboardType: TextInputType.url,
+            ),
+            TextField(
+              controller: _syncToken,
+              decoration: const InputDecoration(
+                labelText: 'Token sync',
+                hintText: 'SYNC_TOKEN del Pi',
+              ),
+              obscureText: true,
+            ),
+            CheckboxListTile(
+              value: _syncAuto,
+              onChanged: (v) => setState(() => _syncAuto = v ?? true),
+              title: const Text('Carica automaticamente i download',
+                  style: TextStyle(fontSize: 14)),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            const Text(
+              'I brani scaricati vengono caricati sul Pi e sincronizzati '
+              'nella libreria Music dell\'iPhone via rustunes.',
+              style: TextStyle(fontSize: 11, color: Colors.white54),
+            ),
           ],
         ),
       ),

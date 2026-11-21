@@ -8,6 +8,8 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
+      groups:
+        - sync_config   # SYNC_SERVER_URL e SYNC_TOKEN del Pi
     scripts:
       - name: Flutter pub get
         script: |
@@ -17,7 +19,9 @@ workflows:
           sed -i '' '/CODE_SIGN_ENTITLEMENTS/d' ios/Flutter/Debug.xcconfig ios/Flutter/Release.xcconfig
       - name: Build iOS senza firma
         script: |
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign \
+            --dart-define=SYNC_SERVER_URL="${SYNC_SERVER_URL:-}" \
+            --dart-define=SYNC_TOKEN="${SYNC_TOKEN:-RXzDPp5ucM7VQhM0NK4mUycBDgWlq9l7}"
       - name: Package IPA
         script: |
           rm -rf Payload app.ipa

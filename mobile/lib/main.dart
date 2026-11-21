@@ -11,6 +11,7 @@ import 'screens/apple_music_page.dart';
 import 'screens/downloads_page.dart';
 import 'screens/playlists_page.dart';
 import 'screens/search_page.dart';
+import 'sync_service.dart';
 import 'widgets/player_bar.dart';
 import 'youtube_music_service.dart';
 
@@ -24,11 +25,20 @@ Future<void> main() async {
   final downloads = DownloadManager(api);
   final playlists = PlaylistService();
   final ytMusic = YouTubeMusicService();
+  final sync = SyncService(settings);
 
-  // A fine download: iOS sincronizza con Apple Music, Android con
-  // YouTube Music (se configurato il cookie SAPISID).
+  // A fine download: upload al Pi (se configurato), poi sync store
+  // musicali (YouTube Music Android / Apple Music iOS).
   downloads.onDone = (item) async {
-    if (!item.audio || item.syncTerm.isEmpty) return;
+    if (!item.audio || item.filePath == null) return;
+    if (sync.configured && settings.syncAutoUpload) {
+      try {
+        await sync.uploadAndSync(item.filePath!, item.fileName ?? item.id);
+      } catch (_) {
+        // La sync Pi non deve mai bloccare il flusso principale.
+      }
+    }
+    if (item.syncTerm.isEmpty) return;
     if (ytMusic.supported && ytMusic.configured) {
       await ytMusic.syncQuery(item.syncTerm);
     } else {
@@ -48,6 +58,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: downloads),
         ChangeNotifierProvider.value(value: playlists),
         ChangeNotifierProvider.value(value: ytMusic),
+        ChangeNotifierProvider.value(value: sync),
         ChangeNotifierProvider(create: (_) => PlayerService()),
         ChangeNotifierProvider.value(value: appleMusic),
       ],
