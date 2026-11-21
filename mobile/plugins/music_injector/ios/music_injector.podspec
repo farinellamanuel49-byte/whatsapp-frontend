@@ -28,6 +28,11 @@ Rust library compiled as a static lib.
     set -e
     if [ ! -f ios/lib/libidevice_ffi.a ]; then
       echo "Building idevice-ffi for iOS..."
+      # Installa Rust se manca (runner CI non ce l'ha)
+      if ! command -v cargo >/dev/null 2>&1; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+      fi
+      export PATH="$HOME/.cargo/bin:$PATH"
       IDEVICE_DIR="$(mktemp -d)"
       git clone --depth 1 https://github.com/jkcoxson/idevice.git "$IDEVICE_DIR/src"
       rustup target add aarch64-apple-ios aarch64-apple-ios-sim
