@@ -8,7 +8,7 @@ const PORT = Number(process.env.PORT) || 8080
 const PUBLIC_DIR = path.join(__dirname, "public")
 
 // Cobalt self-hosted sul Pi: unico backend, niente IIS.
-const COBALT_BASE = (process.env.COBALT_URL || "http://5.134.123.152:9000").replace(/\/+$/, "")
+const COBALT_BASE = (process.env.COBALT_URL || "https://5.134.123.152.sslip.io").replace(/\/+$/, "")
 const COBALT_KEY = process.env.COBALT_API_KEY ||
   "290f64f0a911460ea83fcd9668d2e93a0ab67030e44742998f42c69bbfac614e"
 
