@@ -94,14 +94,18 @@ class ApiClient {
   /// Parametri richiesta Cobalt in base a audio/video e qualità.
   Map<String, dynamic> _cobaltParams({required bool audio, required int quality}) {
     if (audio) {
-      return {'downloadMode': 'audio', 'audioFormat': 'm4a'};
+      return {
+        'downloadMode': 'audio',
+        'audioFormat': 'mp3',
+        'audioBitrate': '320',
+      };
     }
     final q = quality > 0 ? quality.toString() : '720';
     return {'downloadMode': 'auto', 'videoQuality': q};
   }
 
   /// Estensione file in base alla modalità richiesta.
-  String _extForMode({required bool audio}) => audio ? 'm4a' : 'mp4';
+  String _extForMode({required bool audio}) => audio ? 'mp3' : 'mp4';
 
   /// Risolve query/link in un URL diretto di download.
   Future<MediaInfo> resolveMedia({
@@ -196,15 +200,19 @@ class ApiClient {
 
     final params = _cobaltParams(audio: audio, quality: quality);
     final body = <String, dynamic>{'url': ytUrl, ...params};
-    if (kCobaltApiKey.isNotEmpty) body['apiKey'] = kCobaltApiKey;
 
     Map<String, dynamic> resp;
     try {
       final r = await dio.post<Map<String, dynamic>>(
-        '$kCobaltUrl/api/json',
+        kCobaltUrl,
         data: body,
         options: Options(
-          headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            if (kCobaltApiKey.isNotEmpty)
+              'Authorization': 'Api-Key $kCobaltApiKey',
+          },
           receiveTimeout: const Duration(minutes: 4),
           sendTimeout: const Duration(seconds: 30),
         ),

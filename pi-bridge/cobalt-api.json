@@ -4,7 +4,7 @@
       "enabledServices": ["youtube", "tiktok", "instagram", "facebook", "twitter", "bluesky", "lemmy", "pinterest", "soundcloud", "streamable"]
     }
   },
-  "audioFormat": "m4a",
+  "audioFormat": "mp3",
   "downloadMode": "auto",
   "videoQuality": "720",
   "audioBitrate": "320",
