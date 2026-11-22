@@ -28,6 +28,11 @@
 	<true/>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Usato per riprodurre in streaming la tua libreria Apple Music.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSAppleMusicAuthorizationUsageDescription</key>
 	<string>Richiesta per accedere alla tua libreria Apple Music.</string>
 	<key>UIFileSharingEnabled</key>
