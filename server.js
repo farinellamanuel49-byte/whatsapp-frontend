@@ -197,7 +197,7 @@ async function handleStream(req, res, url) {
 async function handleHealth(req, res) {
   try {
     const r = await fetch(`${COBALT_BASE}/`, {
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(25000),
       redirect: "manual",
     })
     sendJson(res, 200, { ok: r.status < 500, cobalt: COBALT_BASE, cobaltStatus: r.status })
