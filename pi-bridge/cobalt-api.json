@@ -1,0 +1,43 @@
+{
+  "apiKeys": {
+    "290f64f0a911460ea83fcd9668d2e93a0ab67030e44742998f42c69bbfac614e": {
+      "enabledServices": ["youtube", "tiktok", "instagram", "facebook", "twitter", "bluesky", "lemmy", "pinterest", "soundcloud", "streamable"]
+    }
+  },
+  "audioFormat": "m4a",
+  "downloadMode": "auto",
+  "videoQuality": "720",
+  "audioBitrate": "320",
+  "listenAddress": "0.0.0.0",
+  "port": 9000,
+  "downloadDir": "/tmp",
+  "logging": {
+    "level": "info"
+  },
+  "instance": {
+    "name": "MusicDownloader Pi",
+    "description": "Cobalt self-hosted per l'app"
+  },
+  "services": {
+    "youtube": { "enabled": true },
+    "tiktok": { "enabled": true },
+    "instagram": { "enabled": true },
+    "facebook": { "enabled": true },
+    "twitter": { "enabled": false },
+    "bluesky": { "enabled": false },
+    "lemmy": { "enabled": false },
+    "pinterest": { "enabled": false },
+    "soundcloud": { "enabled": false },
+    "streamable": { "enabled": false },
+    "xenforo": { "enabled": false }
+  },
+  "doh": {
+    "resolvers": ["1.1.1.1", "8.8.8.8"],
+    "domains": []
+  },
+  "proxy": {
+    "enabled": false
+  },
+  "remoteFileSizeLimit": 2,
+  "ignoreFilesBiggerThan": 2
+}

@@ -11,8 +11,10 @@ const String kApiKey = 'WaDl-2026-9F2C8E4B1A7D6F03C5B9E2A48D1F7A92';
 /// Sovrascrivibile a build-time con --dart-define=COBALT_URL/COBALT_API_KEY.
 const String kCobaltUrl = String.fromEnvironment(
     'COBALT_URL', defaultValue: 'http://5.134.123.152:9000');
-const String kCobaltApiKey =
-    String.fromEnvironment('COBALT_API_KEY', defaultValue: '');
+const String kCobaltApiKey = String.fromEnvironment(
+    'COBALT_API_KEY',
+    defaultValue:
+        '290f64f0a911460ea83fcd9668d2e93a0ab67030e44742998f42c69bbfac614e');
 
 class ApiException implements Exception {
   ApiException(this.message);
