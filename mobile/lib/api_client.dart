@@ -7,8 +7,12 @@ import 'config.dart';
 /// Chiave API condivisa con il backend IIS (web.config / server.js).
 const String kApiKey = 'WaDl-2026-9F2C8E4B1A7D6F03C5B9E2A48D1F7A92';
 
-/// API key Vid Kraken (download YouTube).
-const String kVidKrakenKey = '26b205b9-4493-40c6-8be1-0d170b591f6a';
+/// Cobalt self-hosted (su Pi). Download YouTube/audio/video.
+/// Sovrascrivibile a build-time con --dart-define=COBALT_URL/COBALT_API_KEY.
+const String kCobaltUrl = String.fromEnvironment(
+    'COBALT_URL', defaultValue: 'http://5.134.123.152:9000');
+const String kCobaltApiKey =
+    String.fromEnvironment('COBALT_API_KEY', defaultValue: '');
 
 class ApiException implements Exception {
   ApiException(this.message);
@@ -41,7 +45,7 @@ class DownloadResult {
   final int bytes;
 }
 
-/// Client download: Vid Kraken per YouTube (ricerca + video),
+/// Client download: Cobalt self-hosted per YouTube (ricerca + video),
 /// API IIS locale per TikTok/Instagram/Facebook.
 class ApiClient {
   ApiClient(this.settings)
@@ -57,7 +61,6 @@ class ApiClient {
   final Settings settings;
   final Dio dio;
 
-  static const _vkBase = 'https://vidkraken.com/api/v2';
   static const _ytSearchUrl = 'https://www.youtube.com/youtubei/v1/search';
   static const _ytApiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 
@@ -86,23 +89,17 @@ class ApiClient {
   bool _isYoutubeUrl(String u) =>
       u.contains('youtube.com') || u.contains('youtu.be') || u.contains('ytsearch');
 
-  /// Formato Vid Kraken in base a audio/video e qualità richiesta.
-  String _vkFormat({required bool audio, required int quality}) {
-    if (audio) return 'audio-aac'; // M4A/AAC ~128kbps, compatto e riproducibile
-    return switch (quality) {
-      <= 360 => '360',
-      <= 480 => '480',
-      <= 720 => '720',
-      _ => '1080',
-    };
+  /// Parametri richiesta Cobalt in base a audio/video e qualità.
+  Map<String, dynamic> _cobaltParams({required bool audio, required int quality}) {
+    if (audio) {
+      return {'downloadMode': 'audio', 'audioFormat': 'm4a'};
+    }
+    final q = quality > 0 ? quality.toString() : '720';
+    return {'downloadMode': 'auto', 'videoQuality': q};
   }
 
-  /// Estensione file in base al formato effettivamente consegnato.
-  String _extForFormat(String fmt) => switch (fmt) {
-        'audio-mp3' => 'mp3',
-        'audio' || 'audio-aac' => 'm4a',
-        _ => 'mp4',
-      };
+  /// Estensione file in base alla modalità richiesta.
+  String _extForMode({required bool audio}) => audio ? 'm4a' : 'mp4';
 
   /// Risolve query/link in un URL diretto di download.
   Future<MediaInfo> resolveMedia({
@@ -115,9 +112,9 @@ class ApiClient {
     final u = url ?? '';
     final q = query ?? '';
 
-    // YouTube (o ricerca testuale): Vid Kraken.
+    // YouTube (o ricerca testuale): Cobalt self-hosted.
     if (u.isEmpty || _isYoutubeUrl(u) || !_isSocialUrl(u)) {
-      return _resolveVidKraken(query: q, url: u, audio: audio, quality: quality, cancelToken: cancelToken);
+      return _resolveCobalt(query: q, url: u, audio: audio, quality: quality, cancelToken: cancelToken);
     }
     // TikTok/Instagram/Facebook: endpoint IIS.
     return _resolveIis(query: q, url: u, audio: audio, quality: quality, cancelToken: cancelToken);
@@ -171,8 +168,10 @@ class ApiClient {
     return null;
   }
 
-  /// Flusso Vid Kraken: URL YouTube → submit job → polling → downloadUrl.
-  Future<MediaInfo> _resolveVidKraken({
+  /// Flusso Cobalt: URL YouTube → POST /api/json → URL file diretto.
+  /// Cobalt risponde con status "tunnel"/"redirect" + url, oppure
+  /// "picker" (scelta utente) o "error".
+  Future<MediaInfo> _resolveCobalt({
     required String query,
     required String url,
     required bool audio,
@@ -181,7 +180,6 @@ class ApiClient {
   }) async {
     var ytUrl = url;
     String? title;
-    double? durationSec;
 
     // Se non è un URL YouTube diretto, cerca prima il videoId.
     if (!_isYoutubeUrl(ytUrl) || ytUrl.contains('ytsearch')) {
@@ -194,77 +192,52 @@ class ApiClient {
       ytUrl = 'https://youtu.be/$id';
     }
 
-    // Submit job.
-    final format = _vkFormat(audio: audio, quality: quality);
-    Map<String, dynamic> job;
+    final params = _cobaltParams(audio: audio, quality: quality);
+    final body = <String, dynamic>{'url': ytUrl, ...params};
+    if (kCobaltApiKey.isNotEmpty) body['apiKey'] = kCobaltApiKey;
+
+    Map<String, dynamic> resp;
     try {
       final r = await dio.post<Map<String, dynamic>>(
-        '$_vkBase/download',
-        data: {'url': ytUrl, 'format': format},
+        '$kCobaltUrl/api/json',
+        data: body,
         options: Options(
-          headers: {'Authorization': 'Bearer $kVidKrakenKey'},
-          receiveTimeout: const Duration(seconds: 30),
+          headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+          receiveTimeout: const Duration(minutes: 4),
           sendTimeout: const Duration(seconds: 30),
         ),
         cancelToken: cancelToken,
       );
-      job = r.data ?? {};
+      resp = r.data ?? {};
     } on DioException catch (e) {
-      throw ApiException(_vkError(e));
+      throw ApiException(_cobaltError(e));
     }
-    final jobId = job['jobId']?.toString();
-    if (jobId == null || jobId.isEmpty) {
-      throw ApiException('Vid Kraken: risposta non valida');
-    }
-    title = job['title']?.toString();
-    durationSec = (job['duration'] as num?)?.toDouble();
 
-    // Polling fino a COMPLETED/FAILED (max ~4 min).
-    final deadline = DateTime.now().add(const Duration(minutes: 4));
-    while (DateTime.now().isBefore(deadline)) {
-      if (cancelToken?.isCancelled ?? false) throw ApiException('annullato');
-      await Future.delayed(const Duration(seconds: 3));
-      Map<String, dynamic> st;
-      try {
-        final r = await dio.get<Map<String, dynamic>>(
-          '$_vkBase/download/$jobId',
-          options: Options(
-            headers: {'Authorization': 'Bearer $kVidKrakenKey'},
-            receiveTimeout: const Duration(seconds: 20),
-          ),
-          cancelToken: cancelToken,
-        );
-        st = r.data ?? {};
-      } on DioException catch (e) {
-        if (CancelToken.isCancel(e)) throw ApiException('annullato');
-        continue; // errore di rete transitorio: riprova al prossimo giro
-      }
-      final status = st['status']?.toString() ?? '';
-      if (status == 'COMPLETED') {
-        final dl = st['downloadUrl']?.toString() ?? '';
-        if (dl.isEmpty) throw ApiException('URL di download mancante');
-        final actual = st['actualFormat']?.toString() ?? format;
-        return MediaInfo(
-          title: st['title']?.toString() ?? title ?? 'download',
-          url: dl,
-          ext: _extForFormat(actual),
-          durationSec: durationSec ?? (st['duration'] as num?)?.toDouble(),
-          fileSize: (st['fileSize'] as num?)?.toInt(),
-        );
-      }
-      if (status == 'FAILED') {
-        throw ApiException('Vid Kraken: ${st['errorCode'] ?? 'errore'}');
-      }
-      // IN_QUEUE / IN_PROGRESS: continua il polling
+    final status = resp['status']?.toString() ?? '';
+    if (status == 'error') {
+      throw ApiException(resp['error']?.toString() ?? 'Cobalt: errore');
     }
-    throw ApiException('Timeout: download troppo lento');
+    if (status == 'picker') {
+      throw ApiException('Cobalt: video con più formati, scelta non supportata');
+    }
+    final dl = resp['url']?.toString() ?? '';
+    if (status != 'tunnel' && status != 'redirect' || dl.isEmpty) {
+      throw ApiException('Cobalt: risposta non valida (${resp.toString()})');
+    }
+
+    return MediaInfo(
+      title: title ?? ytUrl,
+      url: dl,
+      ext: _extForMode(audio: audio),
+      durationSec: (resp['duration'] as num?)?.toDouble(),
+    );
   }
 
-  String _vkError(DioException e) {
+  String _cobaltError(DioException e) {
     if (CancelToken.isCancel(e)) return 'annullato';
     final data = e.response?.data;
     if (data is Map && data['error'] != null) return data['error'].toString();
-    return e.message ?? 'Errore Vid Kraken';
+    return e.message ?? 'Errore Cobalt';
   }
 
   // ---------- IIS legacy (TikTok/Instagram/Facebook) ----------
