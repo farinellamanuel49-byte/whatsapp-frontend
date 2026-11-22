@@ -258,47 +258,27 @@
     params.set("quality", String(kind === "audio" ? 0 : quality))
 
     const t0 = performance.now()
-    status("Contatto l'API · yt-dlp sta validando il contenuto… (8-10 secondi)")
+    status("Avvio download…")
     $("bar").className = "bar on"
 
     try {
-      // Prima fase: apriamo lo stream e aspettiamo i PRIMI header senza
-      // leggere il corpo. Così vediamo se l'API ha accettato e cosa manda,
-      // senza caricare un solo byte in memoria.
-      const probe = await fetch("/api/download/stream?" + params.toString())
-      const el = Math.round(performance.now() - t0)
-      $("mLat").textContent = (el / 1000).toFixed(1) + "s"
-
-      if (!probe.ok) {
-        let msg = probe.statusText
-        try { msg = (await probe.json()).message || msg } catch { /* non json */ }
-        throw new Error(msg)
-      }
-
-      const cd = probe.headers.get("content-disposition") || ""
-      const m = /filename="?([^";]+)"?/i.exec(cd)
-      const name = m ? m[1] : "download"
-      const ctype = probe.headers.get("content-type") || "application/octet-stream"
-      probe.body.cancel()
-
-      // Seconda fase: l'URL va passato al browser così com'è. Il browser
-      // scarica in streaming su disco e mostra la sua barra: nessun limite
-      // di memoria, regge anche file da piu' GB.
+      // Download diretto: una sola richiesta. Il probe precedente apriva
+      // due job su Cobalt e a volte il browser salvava la risposta di
+      // errore/0 byte invece del file.
       const href = "/api/download/stream?" + params.toString()
       const a = document.createElement("a")
       a.href = href
-      a.download = name
       a.rel = "noopener"
       document.body.appendChild(a)
       a.click()
       a.remove()
 
       status(
-        "Download avviato · " + name + "\n" +
-        "Formato: " + ctype + "\n" +
-        "Salvataggio su disco delegato al browser: segui la barra delle"+" download.",
+        "Download avviato\n" +
+        "Segui la barra delle download del browser.",
         "ok"
       )
+      $("mLat").textContent = ((performance.now() - t0) / 1000).toFixed(1) + "s"
       $("mSize").textContent = "su disco"
       $("mRate").textContent = "nativo"
       $("mTime").textContent = "—"
