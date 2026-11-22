@@ -7,13 +7,16 @@ const fs = require("fs")
 const PORT = Number(process.env.PORT) || 8080
 const PUBLIC_DIR = path.join(__dirname, "public")
 
-// Cobalt self-hosted sul Pi: unico backend, niente IIS.
-const COBALT_BASE = (process.env.COBALT_URL || "https://5.134.123.152.sslip.io").replace(/\/+$/, "")
-const COBALT_KEY = process.env.COBALT_API_KEY ||
-  "290f64f0a911460ea83fcd9668d2e93a0ab67030e44742998f42c69bbfac614e"
+// Render non raggiunge il Pi: la risoluzione passa dall'API IIS
+// (82.223.13.114) che a sua volta interroga Cobalt sul Pi.
+// Il download finale è un 302 verso il tunnel HTTPS di Cobalt:
+// il browser scarica diretto dal Pi, Render non proxy i byte.
+const API_BASES = (process.env.API_BASES
+  ? process.env.API_BASES.split(",")
+  : ["http://82.223.13.114"]
+).map((s) => s.trim()).filter(Boolean)
 
-const YT_SEARCH_URL = "https://www.youtube.com/youtubei/v1/search"
-const YT_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+const API_KEY = "WaDl-2026-9F2C8E4B1A7D6F03C5B9E2A48D1F7A92"
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -46,141 +49,68 @@ function serveStatic(req, res, pathname) {
     .pipe(res)
 }
 
-// ---------- YouTube search (InnerTube pubblico) ----------
-
-async function youtubeSearch(query) {
-  try {
-    const payload = {
-      context: { client: { clientName: "WEB", clientVersion: "2.20241101.01.00", hl: "it", gl: "IT" } },
-      query,
-    }
-    const r = await fetch(`${YT_SEARCH_URL}?key=${YT_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(20000),
-    })
-    const json = await r.json()
-    return findVideoId(json)
-  } catch {
-    return null
-  }
+// Mappa i parametri della richiesta all'endpoint POST dell'API IIS.
+function resolveEndpoint(search) {
+  const p = new URLSearchParams(search)
+  const url = (p.get("url") || "").toLowerCase()
+  const query = p.get("query") || ""
+  const audio = p.get("audio") === "true"
+  if (url.includes("tiktok.com")) return { endpoint: "tiktok", url: p.get("url") || "", query }
+  if (url.includes("instagram.com")) return { endpoint: "instagram", url: p.get("url") || "", query }
+  if (url.includes("facebook.com") || url.includes("fb.watch")) return { endpoint: "facebook", url: p.get("url") || "", query }
+  if (audio) return { endpoint: "song", url: p.get("url") || "", query }
+  let vurl = p.get("url") || ""
+  let vquery = query
+  if (!vurl && vquery) { vurl = `ytsearch1:${vquery}`; vquery = "" }
+  return { endpoint: "youtube", url: vurl, query: vquery }
 }
 
-function findVideoId(node) {
-  if (node && typeof node === "object") {
-    if (!Array.isArray(node) && typeof node.videoId === "string" && node.videoId.length === 11) {
-      return node.videoId
-    }
-    for (const v of Object.values(node)) {
-      const f = findVideoId(v)
-      if (f) return f
-    }
-  } else if (Array.isArray(node)) {
-    for (const v of node) {
-      const f = findVideoId(v)
-      if (f) return f
-    }
-  }
-  return null
-}
-
-// ---------- Cobalt ----------
-
-function isYoutubeUrl(u) {
-  const s = (u || "").toLowerCase()
-  return s.includes("youtube.com") || s.includes("youtu.be") || s.includes("ytsearch") || s.includes("music.youtube.com")
-}
-
-// Risolve un URL (o query YouTube) in un URL file diretto via Cobalt.
-// Ritorna { url, filename } oppure lancia Error con messaggio leggibile.
-async function cobaltResolve({ url, query, audio, quality }, signal) {
-  let target = (url || "").trim()
-
-  // YouTube: se è una ricerca o non è un URL diretto, trova il videoId.
-  if (isYoutubeUrl(target) || !target || target.startsWith("ytsearch")) {
-    if (target.startsWith("ytsearch")) {
-      const i = target.indexOf(":")
-      target = i >= 0 ? target.slice(i + 1) : target.replace(/^ytsearch\d*/, "")
-    }
-    if (!isYoutubeUrl(target) || target.includes("ytsearch")) {
-      const term = target && !target.startsWith("http") ? target : (query || "")
-      if (!term) throw new Error("Inserisci un titolo o un link.")
-      const id = await youtubeSearch(term)
-      if (!id) throw new Error(`Nessun video YouTube trovato per "${term}"`)
-      target = `https://youtu.be/${id}`
-    }
-    target = target.replace("music.youtube.com", "www.youtube.com")
-  } else if (!target && query) {
-    target = query
-  }
-  if (!target) throw new Error("URL mancante.")
-
-  const body = { url: target }
-  if (audio) {
-    body.downloadMode = "audio"
-    body.audioFormat = "mp3"
-    body.audioBitrate = "320"
-  } else {
-    body.downloadMode = "auto"
-    body.videoQuality = quality && quality !== "0" ? String(quality) : "720"
-  }
-
-  const r = await fetch(`${COBALT_BASE}/`, {
+// POST /api/download/{endpoint} sull'API IIS → URL file (tunnel Cobalt).
+async function resolveMediaUrl(base, info, signal) {
+  const r = await fetch(`${base}/api/download/${info.endpoint}`, {
     method: "POST",
-    headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-      "Authorization": `Api-Key ${COBALT_KEY}`,
-    },
-    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+    body: JSON.stringify({ url: info.url, query: info.query }),
     signal: signal || AbortSignal.timeout(120000),
   })
   const data = await r.json().catch(() => ({}))
-
-  const status = data.status || ""
-  if (status === "error") {
-    const code = data.error && (data.error.code || data.error)
-    throw new Error(`Cobalt: ${code || "errore"}`)
+  if (!r.ok || data.ok !== true) {
+    throw new Error(data.error || data.message || `API ${r.status}`)
   }
-  if (status === "picker") {
-    throw new Error("Cobalt: video con più formati, scelta non supportata")
-  }
-  if ((status === "tunnel" || status === "redirect" || status === "local-processing") && data.url) {
-    // local-processing restituisce tunnel[] invece di url: preso il primo
-    const fileUrl = data.url || (Array.isArray(data.tunnel) && data.tunnel[0])
-    if (fileUrl) {
-      return { url: fileUrl, filename: data.filename || data.output && data.output.filename || "download" }
-    }
-  }
-  if (status === "local-processing" && Array.isArray(data.tunnel) && data.tunnel.length) {
-    return { url: data.tunnel[0], filename: (data.output && data.output.filename) || "download" }
-  }
-  throw new Error(`Cobalt: risposta non valida (${status || "sconosciuto"})`)
+  const media = Array.isArray(data.media) ? data.media : []
+  if (!media.length) throw new Error("Nessun file multimediale trovato")
+  const m = media[0]
+  const title = (data.title || "download").toString()
+  const ext = (m.ext || "mp4").toString()
+  return { url: m.url, filename: `${title}.${ext}` }
 }
-
-// ---------- endpoint ----------
 
 async function handleStream(req, res, url) {
   const controller = new AbortController()
   res.on("close", () => { if (!res.writableEnded) controller.abort() })
 
-  const p = url.searchParams
-  const audio = p.get("audio") === "true"
-  const quality = p.get("quality") || "0"
+  const search = url.search.startsWith("?") ? url.search.slice(1) : url.search
+  const info = resolveEndpoint(search)
 
   try {
-    const media = await cobaltResolve(
-      { url: p.get("url") || "", query: p.get("query") || "", audio, quality },
-      controller.signal,
-    )
+    let media = null
+    let lastErr = null
+    for (const base of API_BASES) {
+      if (controller.signal.aborted) return
+      try {
+        media = await resolveMediaUrl(base, info, controller.signal)
+        break
+      } catch (e) {
+        lastErr = e
+        console.error(`[stream] ${base} fallito: ${e && e.message}`)
+      }
+    }
+    if (!media) throw lastErr || new Error("Nessuna base API raggiungibile")
     if (!media.url) throw new Error("URL del file mancante")
 
     const safeName = String(media.filename || "download")
       .replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "download"
 
-    // 302: il browser scarica direttamente dal tunnel Cobalt (Pi),
-    // Render non proxy più i byte.
     res.writeHead(302, {
       "Location": media.url,
       "Content-Disposition": `attachment; filename="${safeName}"`,
@@ -195,20 +125,23 @@ async function handleStream(req, res, url) {
 }
 
 async function handleHealth(req, res) {
-  try {
-    const r = await fetch(`${COBALT_BASE}/`, {
-      signal: AbortSignal.timeout(25000),
-      redirect: "manual",
-    })
-    sendJson(res, 200, { ok: r.status < 500, cobalt: COBALT_BASE, cobaltStatus: r.status })
-  } catch (e) {
-    sendJson(res, 502, {
-      ok: false,
-      message: "Cobalt non raggiungibile",
-      cobalt: COBALT_BASE,
-      error: String(e && (e.cause && e.cause.message) || e.message || e),
-    })
+  for (const base of API_BASES) {
+    try {
+      const r = await fetch(`${base}/api/download/health`, {
+        headers: { "X-API-Key": API_KEY },
+        signal: AbortSignal.timeout(15000),
+      })
+      const body = await r.text().catch(() => "")
+      let parsed = null
+      try { parsed = JSON.parse(body) } catch { /* non json */ }
+      if (r.ok) {
+        return sendJson(res, 200, { ok: true, base, api: parsed || body.slice(0, 300) })
+      }
+    } catch (e) {
+      console.error(`[health] ${base} non raggiungibile: ${e && e.message}`)
+    }
   }
+  sendJson(res, 502, { ok: false, message: "API non raggiungibile" })
 }
 
 const server = http.createServer(async (req, res) => {
@@ -223,7 +156,7 @@ const server = http.createServer(async (req, res) => {
         uptimeSec: Math.floor((Date.now() - SERVER_START) / 1000),
         node: process.version,
         port: PORT,
-        cobalt: COBALT_BASE,
+        apiBases: API_BASES,
       })
     }
     if (url.pathname.startsWith("/api/")) return sendJson(res, 404, { message: "Endpoint sconosciuto" })
@@ -239,5 +172,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`[frontend] avviato su http://0.0.0.0:${PORT}`)
-  console.log(`[frontend] cobalt: ${COBALT_BASE}`)
+  console.log(`[frontend] basi API: ${API_BASES.join(", ")}`)
 })
