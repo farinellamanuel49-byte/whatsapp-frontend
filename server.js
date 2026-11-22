@@ -202,7 +202,12 @@ async function handleHealth(req, res) {
     })
     sendJson(res, 200, { ok: r.status < 500, cobalt: COBALT_BASE, cobaltStatus: r.status })
   } catch (e) {
-    sendJson(res, 502, { ok: false, message: "Cobalt non raggiungibile", cobalt: COBALT_BASE })
+    sendJson(res, 502, {
+      ok: false,
+      message: "Cobalt non raggiungibile",
+      cobalt: COBALT_BASE,
+      error: String(e && (e.cause && e.cause.message) || e.message || e),
+    })
   }
 }
 
