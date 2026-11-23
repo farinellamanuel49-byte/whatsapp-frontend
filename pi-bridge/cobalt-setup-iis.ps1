@@ -1,4 +1,4 @@
-# cobalt-setup.ps1 — eseguire su 82.223.13.114 (server IIS Windows)
+# cobalt-setup.ps1 ? eseguire su 82.223.13.114 (server IIS Windows)
 # Installa Node.js + Cobalt + Caddy (HTTPS) come servizio.
 # Eseguire in PowerShell come Amministratore.
 
@@ -27,13 +27,18 @@ node --version
 
 Write-Host "=== 2. Cobalt ===" -ForegroundColor Cyan
 # Cobalt e' un monorepo con npm workspaces: si installa DALLA ROOT.
-if (-not (Test-Path "$COBALT_DIR\package.json")) {
-    $zip = "$env:TEMP\cobalt-main.zip"
-    Invoke-WebRequest -Uri "https://github.com/imputnet/cobalt/archive/refs/heads/main.zip" -OutFile $zip
-    Expand-Archive $zip -DestinationPath $env:TEMP -Force
-    # la root del repo diventa C:\cobalt\app (contiene api/, packages/, ...)
-    Move-Item "$env:TEMP\cobalt-main\*" $COBALT_DIR -Force
+# Pulizia: se una run precedente ha lasciato una cartella corrotta, la rifaccio.
+if (Test-Path $COBALT_DIR) {
+    Write-Host "Rimuovo vecchia cartella $COBALT_DIR..."
+    Remove-Item $COBALT_DIR -Recurse -Force -ErrorAction SilentlyContinue
 }
+$extDir = "$env:TEMP\cobalt-extract"
+if (Test-Path $extDir) { Remove-Item $extDir -Recurse -Force }
+$zip = "$env:TEMP\cobalt-main.zip"
+Invoke-WebRequest -Uri "https://github.com/imputnet/cobalt/archive/refs/heads/main.zip" -OutFile $zip
+Expand-Archive $zip -DestinationPath $extDir -Force
+New-Item -ItemType Directory -Force $COBALT_DIR | Out-Null
+Move-Item "$extDir\cobalt-main\*" $COBALT_DIR -Force
 Set-Location $COBALT_DIR
 npm install --omit=dev
 
@@ -76,7 +81,7 @@ Copy-Item "$COBALT_DIR\api.json" "$COBALT_DIR\api\api.json" -Force
 New-Item -ItemType Directory -Force "$CADDY_DIR\downloads" | Out-Null
 
 Write-Host "=== 3. Caddy (HTTPS) ===" -ForegroundColor Cyan
-# Caddy Windows: binding solo 443 (la 80 e' di IIS) — il certificato
+# Caddy Windows: binding solo 443 (la 80 e' di IIS) ? il certificato
 # arriva via TLS-ALPN-01 su 443, non serve la 80.
 $env:COBALT_DOMAIN = $DOMAIN
 @"
@@ -90,7 +95,7 @@ if (-not (Test-Path "$CADDY_DIR\caddy.exe")) {
     Expand-Archive "$CADDY_DIR\caddy.zip" -DestinationPath $CADDY_DIR -Force
 }
 if (-not (Test-Path "$CADDY_DIR\caddy.exe")) {
-    Write-Host "Caddy.exe non scaricato — download fallito" -ForegroundColor Red
+    Write-Host "Caddy.exe non scaricato ? download fallito" -ForegroundColor Red
 }
 
 Write-Host "=== 4. Servizi Windows ===" -ForegroundColor Cyan
