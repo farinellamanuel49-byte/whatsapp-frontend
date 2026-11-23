@@ -26,15 +26,15 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 node --version
 
 Write-Host "=== 2. Cobalt ===" -ForegroundColor Cyan
+# Cobalt e' un monorepo con npm workspaces: si installa DALLA ROOT.
 if (-not (Test-Path "$COBALT_DIR\api\package.json")) {
-    New-Item -ItemType Directory -Force $COBALT_DIR | Out-Null
     $zip = "$env:TEMP\cobalt-main.zip"
     Invoke-WebRequest -Uri "https://github.com/imputnet/cobalt/archive/refs/heads/main.zip" -OutFile $zip
     Expand-Archive $zip -DestinationPath $env:TEMP -Force
-    # sposta la cartella api del repo in C:\cobalt\app
-    Move-Item "$env:TEMP\cobalt-main\api" "$COBALT_DIR\api" -Force
+    # la root del repo diventa C:\cobalt\app (contiene api/, packages/, ...)
+    Move-Item "$env:TEMP\cobalt-main\*" $COBALT_DIR -Force
 }
-Set-Location "$COBALT_DIR\api"
+Set-Location $COBALT_DIR
 npm install --omit=dev
 
 # api.json con la API key condivisa con l'app e l'IIS
@@ -71,7 +71,8 @@ npm install --omit=dev
   "remoteFileSizeLimit": 2,
   "ignoreFilesBiggerThan": 2
 }
-'@ | Out-File -Encoding utf8 "$COBALT_DIR\api\api.json"
+'@ | Out-File -Encoding utf8 "$COBALT_DIR\api.json"
+Copy-Item "$COBALT_DIR\api.json" "$COBALT_DIR\api\api.json" -Force
 New-Item -ItemType Directory -Force "$CADDY_DIR\downloads" | Out-Null
 
 Write-Host "=== 3. Caddy (HTTPS) ===" -ForegroundColor Cyan
@@ -88,8 +89,13 @@ if (-not (Test-Path "$CADDY_DIR\caddy.exe")) {
     Invoke-WebRequest -Uri "https://caddyserver.com/api/download?os=windows&arch=amd64" -OutFile "$CADDY_DIR\caddy.zip"
     Expand-Archive "$CADDY_DIR\caddy.zip" -DestinationPath $CADDY_DIR -Force
 }
+if (-not (Test-Path "$CADDY_DIR\caddy.exe")) {
+    Write-Host "Caddy.exe non scaricato — download fallito" -ForegroundColor Red
+}
 
 Write-Host "=== 4. Servizi Windows ===" -ForegroundColor Cyan
+Write-Host "Porte in uso (80/443/9000):" -ForegroundColor Yellow
+netstat -ano | findstr "LISTENING" | findstr ":80 :443 :9000"
 # Cobalt come servizio (nssm)
 if (-not (Get-Command nssm -ErrorAction SilentlyContinue)) {
     Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm.zip"
@@ -108,6 +114,8 @@ nssm install CaddyProxy "C:\cobalt\caddy.exe" "run --config C:\cobalt\Caddyfile"
 nssm set CaddyProxy AppDirectory $CADDY_DIR
 nssm set CaddyProxy Start SERVICE_AUTO_START
 nssm start CaddyProxy
+Start-Sleep -Seconds 3
+nssm status CaddyProxy
 
 Write-Host "=== 5. Test ===" -ForegroundColor Cyan
 Start-Sleep -Seconds 8
