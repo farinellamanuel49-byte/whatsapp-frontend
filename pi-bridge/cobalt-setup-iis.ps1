@@ -27,7 +27,7 @@ node --version
 
 Write-Host "=== 2. Cobalt ===" -ForegroundColor Cyan
 # Cobalt e' un monorepo con npm workspaces: si installa DALLA ROOT.
-if (-not (Test-Path "$COBALT_DIR\api\package.json")) {
+if (-not (Test-Path "$COBALT_DIR\package.json")) {
     $zip = "$env:TEMP\cobalt-main.zip"
     Invoke-WebRequest -Uri "https://github.com/imputnet/cobalt/archive/refs/heads/main.zip" -OutFile $zip
     Expand-Archive $zip -DestinationPath $env:TEMP -Force
