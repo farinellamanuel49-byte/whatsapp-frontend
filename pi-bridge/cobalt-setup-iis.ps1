@@ -10,14 +10,29 @@ $COBALT_DIR = "C:\cobalt\app"
 
 Write-Host "=== 1. Node.js ===" -ForegroundColor Cyan
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    winget install -e --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+    $nodeInstalled = $false
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install -e --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+        $nodeInstalled = $true
+    } else {
+        # Windows Server senza winget: MSI diretto
+        $msi = "$env:TEMP\nodejs.msi"
+        Invoke-WebRequest -Uri "https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi" -OutFile $msi
+        Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart" -Wait
+        $nodeInstalled = $true
+    }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 node --version
 
 Write-Host "=== 2. Cobalt ===" -ForegroundColor Cyan
 if (-not (Test-Path "$COBALT_DIR\api\package.json")) {
-    git clone --depth 1 https://github.com/imputnet/cobalt.git $COBALT_DIR
+    New-Item -ItemType Directory -Force $COBALT_DIR | Out-Null
+    $zip = "$env:TEMP\cobalt-main.zip"
+    Invoke-WebRequest -Uri "https://github.com/imputnet/cobalt/archive/refs/heads/main.zip" -OutFile $zip
+    Expand-Archive $zip -DestinationPath $env:TEMP -Force
+    # sposta la cartella api del repo in C:\cobalt\app
+    Move-Item "$env:TEMP\cobalt-main\api" "$COBALT_DIR\api" -Force
 }
 Set-Location "$COBALT_DIR\api"
 npm install --omit=dev
