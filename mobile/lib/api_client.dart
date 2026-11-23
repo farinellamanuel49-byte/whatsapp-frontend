@@ -10,7 +10,7 @@ const String kApiKey = 'WaDl-2026-9F2C8E4B1A7D6F03C5B9E2A48D1F7A92';
 /// Cobalt self-hosted (su Pi). Download YouTube/audio/video.
 /// Sovrascrivibile a build-time con --dart-define=COBALT_URL/COBALT_API_KEY.
 const String kCobaltUrl = String.fromEnvironment(
-    'COBALT_URL', defaultValue: 'https://5.134.123.152.sslip.io');
+    'COBALT_URL', defaultValue: 'https://82.223.13.114.sslip.io');
 const String kCobaltApiKey = String.fromEnvironment(
     'COBALT_API_KEY',
     defaultValue:
