@@ -108,12 +108,11 @@ async function handleStream(req, res, url) {
     if (!media) throw lastErr || new Error("Nessuna base API raggiungibile")
     if (!media.url) throw new Error("URL del file mancante")
 
-    const safeName = String(media.filename || "download")
-      .replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "download"
-
+    // Niente Content-Disposition qui: se il 302 ce l'ha, Firefox tratta la
+    // risposta come file da scaricare (0 byte) invece di seguire il redirect.
+    // Cobalt tunnel manda gia' il Content-Disposition con il filename.
     res.writeHead(302, {
       "Location": media.url,
-      "Content-Disposition": `attachment; filename="${safeName}"`,
       "Cache-Control": "no-store",
       "X-Proxy": "whatsapp-frontend",
     })
