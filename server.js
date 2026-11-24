@@ -3,6 +3,8 @@
 const http = require("http")
 const path = require("path")
 const fs = require("fs")
+const { Readable, Transform } = require("stream")
+const { pipeline } = require("stream/promises")
 
 const PORT = Number(process.env.PORT) || 8080
 const PUBLIC_DIR = path.join(__dirname, "public")
@@ -108,15 +110,38 @@ async function handleStream(req, res, url) {
     if (!media) throw lastErr || new Error("Nessuna base API raggiungibile")
     if (!media.url) throw new Error("URL del file mancante")
 
-    // Niente Content-Disposition qui: se il 302 ce l'ha, Firefox tratta la
-    // risposta come file da scaricare (0 byte) invece di seguire il redirect.
-    // Cobalt tunnel manda gia' il Content-Disposition con il filename.
-    res.writeHead(302, {
-      "Location": media.url,
+    // Proxy diretto del file: scarichiamo il tunnel Cobalt (HTTPS) e
+    // streamiamo al browser. Tutto HTTPS end-to-end, niente redirect.
+    const safeName = String(media.filename || "download")
+      .replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "download"
+
+    const upstream = await fetch(media.url, {
+      signal: controller.signal,
+      redirect: "follow",
+    })
+    if (!upstream.ok || !upstream.body) {
+      throw new Error(`Cobalt tunnel: HTTP ${upstream.status}`)
+    }
+
+    const headers = {
+      "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${safeName}"`,
       "Cache-Control": "no-store",
       "X-Proxy": "whatsapp-frontend",
+    }
+    const cl = upstream.headers.get("content-length")
+    if (cl) headers["Content-Length"] = cl
+    res.writeHead(upstream.status, headers)
+
+    let sent = 0
+    const counter = new Transform({
+      transform(chunk, enc, cb) { sent += chunk.length; cb(null, chunk) },
     })
-    res.end()
+    await pipeline(Readable.fromWeb(upstream.body), counter, res).catch((e) => {
+      controller.abort()
+      console.error(`[stream] interrotto dopo ${sent} byte: ${e && e.message}`)
+    })
+    console.log(`[stream] completati ${sent} byte`)
   } catch (e) {
     if (controller.signal.aborted) return
     sendJson(res, 502, { message: String(e && e.message || e) })
