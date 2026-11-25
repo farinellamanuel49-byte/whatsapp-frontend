@@ -9,10 +9,10 @@ const { pipeline } = require("stream/promises")
 const PORT = Number(process.env.PORT) || 8080
 const PUBLIC_DIR = path.join(__dirname, "public")
 
-// Render non raggiunge il Pi: la risoluzione passa dall'API IIS
-// (82.223.13.114) che a sua volta interroga Cobalt sul Pi.
-// Il download finale è un 302 verso il tunnel HTTPS di Cobalt:
-// il browser scarica diretto dal Pi, Render non proxy i byte.
+// Render non raggiunge la VM Cobalt direttamente in modo affidabile:
+// la risoluzione passa dall'API IIS (82.223.13.114) che interroga
+// Cobalt (82.223.13.67:9010). Render proxy i byte del tunnel:
+// il browser vede una sola risposta HTTPS da Render.
 const API_BASES = (process.env.API_BASES
   ? process.env.API_BASES.split(",")
   : ["http://82.223.13.114"]
