@@ -20,6 +20,12 @@ const API_BASES = (process.env.API_BASES
 
 const API_KEY = "WaDl-2026-9F2C8E4B1A7D6F03C5B9E2A48D1F7A92"
 
+// Render non raggiunge la VM Cobalt (82.223.13.67) — il provider filtra
+// le IP AWS. Il tunnel passa quindi dal portproxy su IIS (82.223.13.114:9011)
+// che inoltra a cobalt. Stringa da sostituire → prefisso proxy.
+const TUNNEL_PROXY = process.env.TUNNEL_PROXY || "http://82.223.13.114:9011"
+const TUNNEL_ORIGIN = "http://82.223.13.67:9010"
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -110,12 +116,17 @@ async function handleStream(req, res, url) {
     if (!media) throw lastErr || new Error("Nessuna base API raggiungibile")
     if (!media.url) throw new Error("URL del file mancante")
 
-    // Proxy diretto del file: scarichiamo il tunnel Cobalt (HTTPS) e
-    // streamiamo al browser. Tutto HTTPS end-to-end, niente redirect.
+    // Proxy diretto del file: scarichiamo il tunnel Cobalt e
+    // streamiamo al browser. L'URL del tunnel viene riscritto verso
+    // il portproxy IIS perché Render non raggiunge la VM Cobalt.
     const safeName = String(media.filename || "download")
       .replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "download"
 
-    const upstream = await fetch(media.url, {
+    const tunnelUrl = String(media.url).startsWith(TUNNEL_ORIGIN)
+      ? TUNNEL_PROXY + String(media.url).slice(TUNNEL_ORIGIN.length)
+      : media.url
+
+    const upstream = await fetch(tunnelUrl, {
       signal: controller.signal,
       redirect: "follow",
     })
