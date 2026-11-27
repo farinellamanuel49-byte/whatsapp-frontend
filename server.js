@@ -133,8 +133,22 @@ async function handleStream(req, res, url) {
       throw new Error(`Cobalt tunnel: HTTP ${upstream.status}`)
     }
 
+    // Cobalt serve i file tunnel come text/html: lo correggiamo
+    // in base all'estensione, altrimenti alcuni browser/AV
+    // trattano il download come HTML e lo bloccano (0 byte).
+    const ext = (safeName.match(/\.([a-z0-9]+)$/i)?.[1] || "").toLowerCase()
+    const CT = {
+      mp3: "audio/mpeg", m4a: "audio/mp4", ogg: "audio/ogg",
+      opus: "audio/ogg", wav: "audio/wav", flac: "audio/flac",
+      mp4: "video/mp4", webm: "video/webm", mkv: "video/x-matroska",
+    }
+    const upstreamCt = upstream.headers.get("content-type") || ""
+    const contentType = upstreamCt && upstreamCt !== "text/html"
+      ? upstreamCt
+      : (CT[ext] || "application/octet-stream")
+
     const headers = {
-      "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
+      "Content-Type": contentType,
       "Content-Disposition": `attachment; filename="${safeName}"`,
       "Cache-Control": "no-store",
       "X-Proxy": "whatsapp-frontend",
