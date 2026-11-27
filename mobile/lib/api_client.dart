@@ -7,10 +7,12 @@ import 'config.dart';
 /// Chiave API condivisa con il backend IIS (web.config / server.js).
 const String kApiKey = 'WaDl-2026-9F2C8E4B1A7D6F03C5B9E2A48D1F7A92';
 
-/// Cobalt self-hosted (VM AlmaLinux 82.223.13.67:9010). Download YouTube/audio/video.
+/// Cobalt self-hosted dietro Cloudflare Tunnel. Download YouTube/audio/video.
 /// Sovrascrivibile a build-time con --dart-define=COBALT_URL/COBALT_API_KEY.
 const String kCobaltUrl = String.fromEnvironment(
-    'COBALT_URL', defaultValue: 'http://82.223.13.67:9010');
+    'COBALT_URL',
+    defaultValue:
+        'https://fence-violin-customs-appropriate.trycloudflare.com');
 const String kCobaltApiKey = String.fromEnvironment(
     'COBALT_API_KEY',
     defaultValue:

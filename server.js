@@ -20,10 +20,8 @@ const API_BASES = (process.env.API_BASES
 
 const API_KEY = "WaDl-2026-9F2C8E4B1A7D6F03C5B9E2A48D1F7A92"
 
-// Render non raggiunge la VM Cobalt (82.223.13.67) — il provider filtra
-// le IP AWS. Il tunnel passa quindi dall'endpoint proxy dell'API IIS
-// (/api/download/tunnel) che streamma i byte di cobalt sulla porta 80.
-const TUNNEL_ORIGIN = "http://82.223.13.67:9010"
+// Cobalt è esposto via Cloudflare Tunnel (HTTPS pubblico):
+// Render scarica i byte del tunnel direttamente, niente proxy.
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -115,16 +113,12 @@ async function handleStream(req, res, url) {
     if (!media) throw lastErr || new Error("Nessuna base API raggiungibile")
     if (!media.url) throw new Error("URL del file mancante")
 
-    // Proxy diretto del file: scarichiamo il tunnel Cobalt via endpoint
-    // proxy IIS (porta 80) e streamiamo al browser.
+    // Proxy diretto del file: scarichiamo il tunnel Cobalt (HTTPS
+    // via Cloudflare Tunnel) e streamiamo al browser.
     const safeName = String(media.filename || "download")
       .replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "download"
 
-    const tunnelUrl = String(media.url).startsWith(TUNNEL_ORIGIN)
-      ? `${API_BASES[0]}/api/download/tunnel?u=${encodeURIComponent(media.url)}`
-      : media.url
-
-    const upstream = await fetch(tunnelUrl, {
+    const upstream = await fetch(media.url, {
       signal: controller.signal,
       redirect: "follow",
       headers: { "X-API-Key": API_KEY },
