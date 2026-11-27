@@ -72,6 +72,7 @@ function resolveEndpoint(search) {
 
 // POST /api/download/{endpoint} sull'API IIS → URL file (tunnel Cobalt).
 async function resolveMediaUrl(base, info, signal) {
+
   const r = await fetch(`${base}/api/download/${info.endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
@@ -98,31 +99,64 @@ async function handleStream(req, res, url) {
   const info = resolveEndpoint(search)
 
   try {
+    // Cobalt a intermittenza restituisce tunnel vuoti (Content-Length: 0)
+    // per video che non riesce a processare: riproviamo da capo,
+    // ogni tentativo genera un nuovo tunnel con una nuova elaborazione.
+    const MAX_ATTEMPTS = 4
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+    let upstream = null
     let media = null
     let lastErr = null
-    for (const base of API_BASES) {
-      if (controller.signal.aborted) return
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS && !controller.signal.aborted; attempt++) {
+      media = null
+      for (const base of API_BASES) {
+        if (controller.signal.aborted) return
+        try {
+          media = await resolveMediaUrl(base, info, controller.signal)
+          break
+        } catch (e) {
+          lastErr = e
+          console.error(`[stream] ${base} fallito: ${e && e.message}`)
+        }
+      }
+      if (!media) {
+        lastErr = lastErr || new Error("Nessuna base API raggiungibile")
+        if (attempt < MAX_ATTEMPTS) await sleep(1500 * attempt)
+        continue
+      }
+      if (!media.url) { lastErr = new Error("URL del file mancante"); break }
+
       try {
-        media = await resolveMediaUrl(base, info, controller.signal)
-        break
+        const up = await fetch(media.url, {
+          signal: controller.signal,
+          redirect: "follow",
+          headers: { "X-API-Key": API_KEY },
+        })
+        const cl = up.headers.get("content-length")
+        if (up.ok && up.body && cl !== "0") {
+          upstream = up
+          break
+        }
+        // Tunnel vuoto o errore: scarta e riprova
+        try { await up.body?.cancel() } catch { /* ignore */ }
+        lastErr = new Error(`Cobalt tunnel vuoto (HTTP ${up.status}, CL ${cl || "?"})`)
+        console.error(`[stream] tentativo ${attempt}/${MAX_ATTEMPTS}: ${lastErr.message}`)
       } catch (e) {
         lastErr = e
-        console.error(`[stream] ${base} fallito: ${e && e.message}`)
+        console.error(`[stream] tentativo ${attempt}/${MAX_ATTEMPTS} fallito: ${e && e.message}`)
       }
+      if (attempt < MAX_ATTEMPTS) await sleep(1500 * attempt)
     }
-    if (!media) throw lastErr || new Error("Nessuna base API raggiungibile")
-    if (!media.url) throw new Error("URL del file mancante")
+
+    if (!upstream) throw lastErr || new Error("Nessun file ottenibile da Cobalt")
+    media = media || {}
 
     // Proxy diretto del file: scarichiamo il tunnel Cobalt (HTTPS
     // via Cloudflare Tunnel) e streamiamo al browser.
     const safeName = String(media.filename || "download")
       .replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "download"
 
-    const upstream = await fetch(media.url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "X-API-Key": API_KEY },
-    })
     if (!upstream.ok || !upstream.body) {
       throw new Error(`Cobalt tunnel: HTTP ${upstream.status}`)
     }
