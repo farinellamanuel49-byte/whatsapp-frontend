@@ -26,6 +26,11 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: CocoaPods install
+        run: |
+          cd ios
+          pod install --repo-update
+
       - name: Rimuovi entitlement MusicKit (non firmabile con Apple ID gratuito)
         run: |
           sed -i '' '/CODE_SIGN_ENTITLEMENTS/d' ios/Flutter/Debug.xcconfig ios/Flutter/Release.xcconfig
