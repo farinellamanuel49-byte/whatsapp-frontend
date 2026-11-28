@@ -176,43 +176,63 @@ class DownloadManager extends ChangeNotifier {
       final dir = await filesDir;
       final tmp = File('${dir.path}${Platform.pathSeparator}${item.id}.part');
 
-      // Fase 1: risolvi query/link → URL diretto del file (yt-dlp lato server,
-      // può richiedere fino a ~60s).
-      item.status = DlStatus.downloading;
-      item.progress = -1;
-      notifyListeners();
-      final media = await api.resolveMedia(
-        query: item.query,
-        url: item.url,
-        audio: item.audio,
-        quality: item.quality,
-        cancelToken: token,
-      );
-
-      // Fase 2: download diretto dal media URL.
-      final safeTitle = media.title
-          .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
-          .trim();
-      final fileName =
-          '${safeTitle.isEmpty ? item.label : safeTitle}.${media.ext}';
-      final result = await api.downloadFile(
-        mediaUrl: media.url,
-        fileName: fileName,
-        tempPath: tmp.path,
-        dirPath: dir.path,
-        cancelToken: token,
-        onProgress: (received, total) {
-          item.received = received;
-          item.total = total;
-          item.progress = total > 0 ? received / total : -1;
+      // Fase 1+2: risolvi e scarica. Cobalt a intermittenza restituisce
+      // tunnel vuoti (file da 0 byte): riprova da capo fino a 3 volte.
+      const maxAttempts = 3;
+      Object? lastError;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          item.status = DlStatus.downloading;
+          item.progress = -1;
           notifyListeners();
-        },
-      );
-      item.status = DlStatus.done;
-      item.filePath = result.savedPath;
-      item.fileName = result.fileName;
-      item.bytes = result.bytes;
-      item.progress = 1;
+          final media = await api.resolveMedia(
+            query: item.query,
+            url: item.url,
+            audio: item.audio,
+            quality: item.quality,
+            cancelToken: token,
+          );
+
+          final safeTitle = media.title
+              .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+              .trim();
+          final fileName =
+              '${safeTitle.isEmpty ? item.label : safeTitle}.${media.ext}';
+          final result = await api.downloadFile(
+            mediaUrl: media.url,
+            fileName: fileName,
+            tempPath: tmp.path,
+            dirPath: dir.path,
+            cancelToken: token,
+            onProgress: (received, total) {
+              item.received = received;
+              item.total = total;
+              item.progress = total > 0 ? received / total : -1;
+              notifyListeners();
+            },
+          );
+          if (result.bytes <= 0) {
+            await File(result.savedPath).delete().catchError((_) => File(''));
+            throw ApiException('File vuoto (0 byte)');
+          }
+          item.status = DlStatus.done;
+          item.filePath = result.savedPath;
+          item.fileName = result.fileName;
+          item.bytes = result.bytes;
+          item.progress = 1;
+          lastError = null;
+          break;
+        } catch (e) {
+          if (token.isCancelled ||
+              (e is DioException && CancelToken.isCancel(e))) {
+            rethrow;
+          }
+          lastError = e;
+          if (attempt == maxAttempts) break;
+          await Future.delayed(Duration(milliseconds: 1200 * attempt));
+        }
+      }
+      if (lastError != null) throw lastError;
       final cb = onDone;
       if (cb != null) {
         unawaited(cb(item).catchError((_) {}));
