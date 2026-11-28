@@ -5,10 +5,12 @@ import 'api_client.dart';
 import 'apple_music_service.dart';
 import 'config.dart';
 import 'download_manager.dart';
+import 'lora_service.dart';
 import 'player_service.dart';
 import 'playlist_service.dart';
 import 'screens/apple_music_page.dart';
 import 'screens/downloads_page.dart';
+import 'screens/lora_page.dart';
 import 'screens/playlists_page.dart';
 import 'screens/search_page.dart';
 import 'sync_service.dart';
@@ -26,6 +28,7 @@ Future<void> main() async {
   final playlists = PlaylistService();
   final ytMusic = YouTubeMusicService();
   final sync = SyncService(settings);
+  final lora = LoraService();
 
   // A fine download: upload al Pi (se configurato), poi sync store
   // musicali (YouTube Music Android / Apple Music iOS).
@@ -59,6 +62,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: playlists),
         ChangeNotifierProvider.value(value: ytMusic),
         ChangeNotifierProvider.value(value: sync),
+        ChangeNotifierProvider.value(value: lora),
         ChangeNotifierProvider(create: (_) => PlayerService()),
         ChangeNotifierProvider.value(value: appleMusic),
       ],
@@ -109,6 +113,7 @@ class _HomeShellState extends State<_HomeShell> {
       const DownloadsPage(),
       const PlaylistsPage(),
       if (widget.showAppleMusic) const AppleMusicPage(),
+      if (widget.showAppleMusic) const LoraPage(),
     ];
 
     return Scaffold(
@@ -136,11 +141,16 @@ class _HomeShellState extends State<_HomeShell> {
             icon: Icon(Icons.queue_music),
             label: 'Playlist',
           ),
-          if (widget.showAppleMusic)
+          if (widget.showAppleMusic) ...[
             const NavigationDestination(
               icon: Icon(Icons.apple),
               label: 'Apple Music',
             ),
+            const NavigationDestination(
+              icon: Icon(Icons.sync_alt),
+              label: 'Lora',
+            ),
+          ],
         ],
       ),
     );

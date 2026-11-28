@@ -21,6 +21,7 @@ dependencies:
   crypto: ^3.0.8
   music_injector:
     path: plugins/music_injector
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:
