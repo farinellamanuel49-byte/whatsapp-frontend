@@ -1,11 +1,8 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../apple_music_service.dart';
 import '../download_manager.dart';
-import '../music_injector.dart';
 import '../player_service.dart';
 import '../playlist_service.dart';
 import '../sync_service.dart';
@@ -148,47 +145,6 @@ class _DownloadsPageState extends State<DownloadsPage> {
     }
   }
 
-  bool _injecting = false;
-
-  /// Inietta tutti i brani audio completati nella libreria Music iOS.
-  Future<void> _injectAll() async {
-    final dm = context.read<DownloadManager>();
-    final done = dm.items
-        .where((e) => e.finished && e.audio && e.filePath != null)
-        .toList();
-    if (done.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nessun brano audio scaricato.')),
-      );
-      return;
-    }
-    setState(() => _injecting = true);
-    var ok = 0;
-    String? lastError;
-    for (final item in done) {
-      try {
-        final r = await MusicInjector.injectTrack(
-          localPath: item.filePath!,
-          title: item.fileName,
-          artist: item.label,
-        );
-        if (r['ok'] == true) ok++;
-      } catch (e) {
-        lastError = e.toString();
-      }
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Iniettati $ok brani in Music'
-          '${done.length - ok > 0 ? ' · ${done.length - ok} errori' : ''}'
-          '${lastError != null ? ' — $lastError' : ''}',
-        ),
-      ),
-    );
-    setState(() => _injecting = false);
-  }
 
   Future<void> _playAll(List<DownloadItem> done) async {
     final player = context.read<PlayerService>();
@@ -258,18 +214,6 @@ class _DownloadsPageState extends State<DownloadsPage> {
                     )
                   : const Icon(Icons.sync),
               onPressed: _syncing ? null : _syncWithAppleMusic,
-            ),
-          if (Platform.isIOS && dm.items.any((e) => e.finished && e.audio))
-            IconButton(
-              tooltip: 'Inietta nella libreria Music',
-              icon: _injecting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.library_add),
-              onPressed: _injecting ? null : _injectAll,
             ),
           if (sync.configured && dm.items.any((e) => e.finished && e.audio))
             IconButton(

@@ -19,8 +19,6 @@ dependencies:
   music_kit_platform_interface: ^1.2.0
   uuid: ^4.5.1
   crypto: ^3.0.8
-  music_injector:
-    path: plugins/music_injector
   webview_flutter: ^4.10.0
 
 dev_dependencies:
