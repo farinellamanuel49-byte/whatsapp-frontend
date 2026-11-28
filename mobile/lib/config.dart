@@ -19,7 +19,7 @@ class Settings extends ChangeNotifier {
   // Server di sincronizzazione (Pi + sync_api.py + rustunes).
   // I default possono essere fissati a build-time con --dart-define.
   String syncServerUrl = const String.fromEnvironment(
-      'SYNC_SERVER_URL', defaultValue: 'http://5.134.123.152:8787');
+      'SYNC_SERVER_URL', defaultValue: '');
   String syncToken =
       const String.fromEnvironment('SYNC_TOKEN', defaultValue: '');
   bool syncAutoUpload = true;

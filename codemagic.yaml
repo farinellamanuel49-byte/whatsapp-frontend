@@ -20,7 +20,7 @@ workflows:
       - name: Build iOS senza firma
         script: |
           flutter build ios --release --no-codesign \
-            --dart-define=SYNC_SERVER_URL="${SYNC_SERVER_URL:-http://5.134.123.152:8787}" \
+            --dart-define=SYNC_SERVER_URL="${SYNC_SERVER_URL:-}" \
             --dart-define=SYNC_TOKEN="${SYNC_TOKEN:-RXzDPp5ucM7VQhM0NK4mUycBDgWlq9l7}" \
             --dart-define=COBALT_URL="${COBALT_URL:-https://fence-violin-customs-appropriate.trycloudflare.com}" \
             --dart-define=COBALT_API_KEY="${COBALT_API_KEY:-290f64f0a911460ea83fcd9668d2e93a0ab67030e44742998f42c69bbfac614e}"
